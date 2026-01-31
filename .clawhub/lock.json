@@ -4,6 +4,46 @@
     "sonoscli": {
       "version": "1.0.0",
       "installedAt": 1769851373570
+    },
+    "youtube-video-downloader": {
+      "version": "1.0.1",
+      "installedAt": 1769893085345
+    },
+    "poly": {
+      "version": "1.0.0",
+      "installedAt": 1769893126574
+    },
+    "stock-market-pro": {
+      "version": "1.1.0",
+      "installedAt": 1769893524295
+    },
+    "weather": {
+      "version": "1.0.0",
+      "installedAt": 1769893525545
+    },
+    "arxiv-watcher": {
+      "version": "1.0.0",
+      "installedAt": 1769893527084
+    },
+    "pdf": {
+      "version": "0.1.0",
+      "installedAt": 1769893528344
+    },
+    "research": {
+      "version": "1.0.1",
+      "installedAt": 1769893529732
+    },
+    "meow-finder": {
+      "version": "1.0.0",
+      "installedAt": 1769893712439
+    },
+    "reddit-insights": {
+      "version": "1.2.0",
+      "installedAt": 1769893713898
+    },
+    "ddg-search": {
+      "version": "1.0.0",
+      "installedAt": 1769893715702
     }
   }
 }

@@ -1,0 +1,362 @@
+[
+  {
+    "name": "Canva AI",
+    "description": "All-in-one design platform with AI features for posts, reels, presentations, and more",
+    "category": "Design",
+    "tags": ["image", "video", "social", "instagram", "carousel", "free"],
+    "url": "https://canva.com",
+    "free": true,
+    "pricing": "Free tier + Pro $12.99/mo"
+  },
+  {
+    "name": "ChatGPT",
+    "description": "Conversational AI for writing, coding, brainstorming, and analysis",
+    "category": "Chat",
+    "tags": ["writing", "code", "assistant", "free"],
+    "url": "https://chat.openai.com",
+    "free": true,
+    "pricing": "Free tier + Plus $20/mo"
+  },
+  {
+    "name": "Claude",
+    "description": "Advanced AI assistant for writing, analysis, and coding with long context",
+    "category": "Chat",
+    "tags": ["writing", "code", "assistant", "analysis", "free"],
+    "url": "https://claude.ai",
+    "free": true,
+    "pricing": "Free tier + Pro $20/mo"
+  },
+  {
+    "name": "Midjourney",
+    "description": "Premium AI image generation with stunning artistic quality",
+    "category": "Image",
+    "tags": ["image", "art", "illustration", "design"],
+    "url": "https://midjourney.com",
+    "free": false,
+    "pricing": "From $10/mo"
+  },
+  {
+    "name": "DALL-E 3",
+    "description": "OpenAI's image generator with excellent prompt following",
+    "category": "Image",
+    "tags": ["image", "art", "design"],
+    "url": "https://openai.com/dall-e-3",
+    "free": false,
+    "pricing": "Via ChatGPT Plus $20/mo"
+  },
+  {
+    "name": "Leonardo AI",
+    "description": "AI image generation with fine-tuned models and consistent styles",
+    "category": "Image",
+    "tags": ["image", "art", "illustration", "free"],
+    "url": "https://leonardo.ai",
+    "free": true,
+    "pricing": "Free tier + paid plans"
+  },
+  {
+    "name": "Runway ML",
+    "description": "Professional AI video editing, generation, and effects",
+    "category": "Video",
+    "tags": ["video", "editing", "effects", "reel"],
+    "url": "https://runway.ml",
+    "free": true,
+    "pricing": "Free tier + from $12/mo"
+  },
+  {
+    "name": "HeyGen",
+    "description": "AI avatar videos and talking head generation for marketing",
+    "category": "Video",
+    "tags": ["video", "avatar", "spokesperson", "marketing"],
+    "url": "https://heygen.com",
+    "free": true,
+    "pricing": "Free tier + from $24/mo"
+  },
+  {
+    "name": "Pika",
+    "description": "Creative AI video generation from text and images",
+    "category": "Video",
+    "tags": ["video", "animation", "creative", "free"],
+    "url": "https://pika.art",
+    "free": true,
+    "pricing": "Free tier available"
+  },
+  {
+    "name": "Synthesia",
+    "description": "AI video generation with realistic avatars for training and marketing",
+    "category": "Video",
+    "tags": ["video", "avatar", "training", "marketing"],
+    "url": "https://synthesia.io",
+    "free": false,
+    "pricing": "From $22/mo"
+  },
+  {
+    "name": "InVideo AI",
+    "description": "Text-to-video creation for social media and marketing",
+    "category": "Video",
+    "tags": ["video", "social", "reel", "shorts", "free"],
+    "url": "https://invideo.io",
+    "free": true,
+    "pricing": "Free tier + from $25/mo"
+  },
+  {
+    "name": "Opus Clip",
+    "description": "Turn long videos into viral shorts/reels with AI",
+    "category": "Video",
+    "tags": ["video", "shorts", "reel", "repurpose", "free"],
+    "url": "https://opus.pro",
+    "free": true,
+    "pricing": "Free tier + from $15/mo"
+  },
+  {
+    "name": "Descript",
+    "description": "AI-powered video/audio editing with transcription and overdub",
+    "category": "Video",
+    "tags": ["video", "audio", "editing", "podcast", "transcription"],
+    "url": "https://descript.com",
+    "free": true,
+    "pricing": "Free tier + from $12/mo"
+  },
+  {
+    "name": "ElevenLabs",
+    "description": "Realistic AI voice generation and text-to-speech",
+    "category": "Audio",
+    "tags": ["audio", "voice", "speech", "tts", "free"],
+    "url": "https://elevenlabs.io",
+    "free": true,
+    "pricing": "Free tier + from $5/mo"
+  },
+  {
+    "name": "Suno",
+    "description": "AI music generation from text prompts",
+    "category": "Audio",
+    "tags": ["audio", "music", "generation", "free"],
+    "url": "https://suno.ai",
+    "free": true,
+    "pricing": "Free tier available"
+  },
+  {
+    "name": "Copy.ai",
+    "description": "AI copywriting for marketing, ads, and social media",
+    "category": "Writing",
+    "tags": ["writing", "copy", "marketing", "social", "free"],
+    "url": "https://copy.ai",
+    "free": true,
+    "pricing": "Free tier + from $49/mo"
+  },
+  {
+    "name": "Jasper",
+    "description": "Enterprise AI writing assistant for marketing teams",
+    "category": "Writing",
+    "tags": ["writing", "marketing", "content", "enterprise"],
+    "url": "https://jasper.ai",
+    "free": false,
+    "pricing": "From $39/mo"
+  },
+  {
+    "name": "Notion AI",
+    "description": "AI writing and productivity features inside Notion",
+    "category": "Productivity",
+    "tags": ["writing", "productivity", "notes", "organization"],
+    "url": "https://notion.so",
+    "free": false,
+    "pricing": "$10/mo add-on"
+  },
+  {
+    "name": "Gamma",
+    "description": "AI-powered presentations and documents",
+    "category": "Productivity",
+    "tags": ["presentation", "slides", "documents", "free"],
+    "url": "https://gamma.app",
+    "free": true,
+    "pricing": "Free tier + from $10/mo"
+  },
+  {
+    "name": "Perplexity",
+    "description": "AI-powered search engine with cited sources",
+    "category": "Research",
+    "tags": ["search", "research", "analysis", "free"],
+    "url": "https://perplexity.ai",
+    "free": true,
+    "pricing": "Free tier + Pro $20/mo"
+  },
+  {
+    "name": "GitHub Copilot",
+    "description": "AI coding assistant that suggests code in your IDE",
+    "category": "Code",
+    "tags": ["code", "programming", "developer", "ide"],
+    "url": "https://github.com/features/copilot",
+    "free": false,
+    "pricing": "$10/mo"
+  },
+  {
+    "name": "Cursor",
+    "description": "AI-first code editor with chat and generation",
+    "category": "Code",
+    "tags": ["code", "programming", "ide", "editor", "free"],
+    "url": "https://cursor.sh",
+    "free": true,
+    "pricing": "Free tier + from $20/mo"
+  },
+  {
+    "name": "Replit AI",
+    "description": "AI coding assistant in browser-based IDE",
+    "category": "Code",
+    "tags": ["code", "programming", "ide", "browser", "free"],
+    "url": "https://replit.com",
+    "free": true,
+    "pricing": "Free tier + from $7/mo"
+  },
+  {
+    "name": "Buffer",
+    "description": "Social media scheduling with AI caption suggestions",
+    "category": "Social",
+    "tags": ["social", "scheduling", "instagram", "twitter", "free"],
+    "url": "https://buffer.com",
+    "free": true,
+    "pricing": "Free tier + from $6/mo"
+  },
+  {
+    "name": "Later",
+    "description": "Visual social media planner for Instagram",
+    "category": "Social",
+    "tags": ["social", "instagram", "scheduling", "visual", "free"],
+    "url": "https://later.com",
+    "free": true,
+    "pricing": "Free tier + from $18/mo"
+  },
+  {
+    "name": "Adobe Firefly",
+    "description": "Adobe's AI image generation and editing tools",
+    "category": "Image",
+    "tags": ["image", "editing", "design", "adobe", "free"],
+    "url": "https://firefly.adobe.com",
+    "free": true,
+    "pricing": "Free tier + Creative Cloud"
+  },
+  {
+    "name": "Remove.bg",
+    "description": "AI background removal for images",
+    "category": "Image",
+    "tags": ["image", "editing", "background", "free"],
+    "url": "https://remove.bg",
+    "free": true,
+    "pricing": "Free tier + credits"
+  },
+  {
+    "name": "Lumen5",
+    "description": "Turn blog posts into videos with AI",
+    "category": "Video",
+    "tags": ["video", "blog", "repurpose", "marketing", "free"],
+    "url": "https://lumen5.com",
+    "free": true,
+    "pricing": "Free tier + from $19/mo"
+  },
+  {
+    "name": "Pictory",
+    "description": "AI video creation from scripts and articles",
+    "category": "Video",
+    "tags": ["video", "script", "marketing", "social"],
+    "url": "https://pictory.ai",
+    "free": false,
+    "pricing": "From $19/mo"
+  },
+  {
+    "name": "VEED",
+    "description": "Online video editor with AI captions and effects",
+    "category": "Video",
+    "tags": ["video", "editing", "captions", "subtitles", "free"],
+    "url": "https://veed.io",
+    "free": true,
+    "pricing": "Free tier + from $18/mo"
+  },
+  {
+    "name": "CapCut",
+    "description": "Free video editor with AI effects for TikTok/Reels",
+    "category": "Video",
+    "tags": ["video", "editing", "tiktok", "reel", "free"],
+    "url": "https://capcut.com",
+    "free": true,
+    "pricing": "Free + Pro features"
+  },
+  {
+    "name": "Moltbot",
+    "description": "Personal AI assistant that runs locally with memory",
+    "category": "Productivity",
+    "tags": ["assistant", "automation", "memory", "local", "free"],
+    "url": "https://molt.bot",
+    "free": true,
+    "pricing": "Free (self-hosted)"
+  },
+  {
+    "name": "Otter.ai",
+    "description": "AI meeting transcription and notes",
+    "category": "Productivity",
+    "tags": ["transcription", "meetings", "notes", "free"],
+    "url": "https://otter.ai",
+    "free": true,
+    "pricing": "Free tier + from $10/mo"
+  },
+  {
+    "name": "Grammarly",
+    "description": "AI writing assistant for grammar and style",
+    "category": "Writing",
+    "tags": ["writing", "grammar", "editing", "free"],
+    "url": "https://grammarly.com",
+    "free": true,
+    "pricing": "Free tier + Premium $12/mo"
+  },
+  {
+    "name": "QuillBot",
+    "description": "AI paraphrasing and writing enhancement",
+    "category": "Writing",
+    "tags": ["writing", "paraphrase", "rewrite", "free"],
+    "url": "https://quillbot.com",
+    "free": true,
+    "pricing": "Free tier + Premium $10/mo"
+  },
+  {
+    "name": "Writesonic",
+    "description": "AI content writer for blogs, ads, and social",
+    "category": "Writing",
+    "tags": ["writing", "blog", "marketing", "social", "free"],
+    "url": "https://writesonic.com",
+    "free": true,
+    "pricing": "Free tier + from $16/mo"
+  },
+  {
+    "name": "Ideogram",
+    "description": "AI image generation with excellent text rendering",
+    "category": "Image",
+    "tags": ["image", "art", "text", "design", "free"],
+    "url": "https://ideogram.ai",
+    "free": true,
+    "pricing": "Free tier available"
+  },
+  {
+    "name": "Stable Diffusion",
+    "description": "Open-source AI image generation (run locally)",
+    "category": "Image",
+    "tags": ["image", "art", "open-source", "local", "free"],
+    "url": "https://stability.ai",
+    "free": true,
+    "pricing": "Free (self-hosted)"
+  },
+  {
+    "name": "Whisper",
+    "description": "OpenAI's open-source speech-to-text",
+    "category": "Audio",
+    "tags": ["audio", "transcription", "speech", "open-source", "free"],
+    "url": "https://github.com/openai/whisper",
+    "free": true,
+    "pricing": "Free (open-source)"
+  },
+  {
+    "name": "Zapier",
+    "description": "Automation platform with AI features",
+    "category": "Productivity",
+    "tags": ["automation", "workflow", "integration", "free"],
+    "url": "https://zapier.com",
+    "free": true,
+    "pricing": "Free tier + from $20/mo"
+  }
+]

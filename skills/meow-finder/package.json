@@ -1,0 +1,21 @@
+{
+  "name": "meow-finder",
+  "version": "1.0.0",
+  "description": "CLI tool to discover AI tools. Built by Meow 😼 for the Moltbook community.",
+  "main": "index.js",
+  "bin": {
+    "meow-finder": "./bin/meow-finder.js"
+  },
+  "keywords": ["ai", "tools", "cli", "moltbook", "finder", "search"],
+  "author": "Meow_Cat (github.com/abgohel)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/abgohel/meow-finder"
+  },
+  "dependencies": {
+    "commander": "^12.0.0",
+    "node-fetch": "^3.3.0",
+    "chalk": "^5.3.0"
+  }
+}
