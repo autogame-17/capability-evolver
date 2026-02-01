@@ -8,6 +8,40 @@ const MEMORY_DIR = process.env.MEMORY_DIR || path.resolve(__dirname, '../../memo
 const AGENT_SESSIONS_DIR = path.join(os.homedir(), '.openclaw/agents/main/sessions');
 const TODAY_LOG = path.join(MEMORY_DIR, new Date().toISOString().split('T')[0] + '.md');
 
+function formatSessionLog(jsonlContent) {
+    return jsonlContent.split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+            try {
+                const data = JSON.parse(line);
+                if (data.type === 'message' && data.message) {
+                    const role = (data.message.role || 'unknown').toUpperCase();
+                    let content = '';
+                    if (Array.isArray(data.message.content)) {
+                         content = data.message.content.map(c => {
+                             if(c.type === 'text') return c.text;
+                             if(c.type === 'toolCall') return `[TOOL: ${c.name}]`;
+                             return '';
+                         }).join(' ');
+                    } else if (typeof data.message.content === 'string') {
+                        content = data.message.content;
+                    } else {
+                        content = JSON.stringify(data.message.content);
+                    }
+                    // Clean up newlines for compact reading
+                    content = content.replace(/\n+/g, ' ').slice(0, 300);
+                    return `**${role}**: ${content}`;
+                }
+                if (data.type === 'tool_result' || (data.message && data.message.role === 'toolResult')) {
+                     return `[TOOL RESULT]`;
+                }
+                return null;
+            } catch (e) { return null; }
+        })
+        .filter(Boolean)
+        .join('\n');
+}
+
 function readRealSessionLog() {
     try {
         if (!fs.existsSync(AGENT_SESSIONS_DIR)) return '[NO SESSION LOGS FOUND]';
@@ -61,14 +95,11 @@ function readRealSessionLog() {
             const prevContent = readRecentLog(prevFile, needed);
             
             // Format to show continuity
-            content = `\n--- PREVIOUS SESSION (${files[1].name}) ---\n${prevContent}\n\n--- CURRENT SESSION (${files[0].name}) ---\n${content}`;
+            content = `\n--- PREVIOUS SESSION (${files[1].name}) ---\n${formatSessionLog(prevContent)}\n\n--- CURRENT SESSION (${files[0].name}) ---\n${formatSessionLog(content)}`;
+        } else {
+             content = formatSessionLog(content);
         }
         
-        // Try to align to a line start to avoid broken JSON
-        const firstNewLine = content.indexOf('\n');
-        if (firstNewLine !== -1 && firstNewLine < 200) {
-            content = content.slice(firstNewLine + 1);
-        }
         return content;
     } catch (e) {
         return `[ERROR READING SESSION LOGS: ${e.message}]`;

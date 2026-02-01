@@ -270,19 +270,20 @@ async function sendCard(options) {
         
         if (data.code !== 0) {
              console.warn(`[Feishu-Card] Card send failed (Code: ${data.code}, Msg: ${data.msg}). Attempting fallback to plain text...`);
-             return await sendPlainTextFallback(token, receiveIdType, options.target, contentText, options.title);
+             return await sendPlainTextFallback(token, receiveIdType, options.target, contentText, options.title, `Card Error: ${data.msg}`);
         }
         
         console.log('Success:', JSON.stringify(data.data, null, 2));
+        updateStats('card_success');
 
     } catch (e) {
         console.error('Network/API Error during Card Send:', e.message);
         console.log('[Feishu-Card] Attempting fallback to plain text...');
-        return await sendPlainTextFallback(token, receiveIdType, options.target, contentText, options.title);
+        return await sendPlainTextFallback(token, receiveIdType, options.target, contentText, options.title, `Network Error: ${e.message}`);
     }
 }
 
-async function sendPlainTextFallback(token, receiveIdType, receiveId, text, title) {
+async function sendPlainTextFallback(token, receiveIdType, receiveId, text, title, reason = 'Unknown') {
     if (!text) {
         console.error('Fallback failed: No text content available.');
         process.exit(1);
@@ -311,11 +312,14 @@ async function sendPlainTextFallback(token, receiveIdType, receiveId, text, titl
         const data = await res.json();
         if (data.code !== 0) {
              console.error('Fallback Text Send Failed:', JSON.stringify(data, null, 2));
+             updateStats('failure', `Fallback Failed: ${data.msg} (Original: ${reason})`);
              process.exit(1);
         }
         console.log('Fallback Success:', JSON.stringify(data.data, null, 2));
+        updateStats('fallback_success', reason);
     } catch (e) {
         console.error('Fallback Network Error:', e.message);
+        updateStats('failure', `Fallback Network Error: ${e.message} (Original: ${reason})`);
         process.exit(1);
     }
 }
