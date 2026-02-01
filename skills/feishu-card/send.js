@@ -273,15 +273,7 @@ async function sendCardLogic(token, options) {
         }
     }
 
-    let contentText = '';
-    if (options.textFile) {
-        try { contentText = fs.readFileSync(options.textFile, 'utf8'); } catch (e) {
-            console.error(`Failed to read file: ${options.textFile}`);
-            process.exit(1);
-        }
-    } else if (options.text) {
-        contentText = options.text.replace(/\\n/g, '\n');
-    }
+    let contentText = options.text || '';
 
     if (contentText) {
         // Safety: Truncate to avoid API limits (Feishu Card limit ~30k chars)
@@ -546,19 +538,52 @@ const ALLOWED_COLORS = [
 ];
 
 (async () => {
-    let textContent = options.text;
+    // Phase 1: Input Normalization
+    let fromCli = false;
+    if (options.text) fromCli = true; // Was provided via -x flag
+
     if (options.textFile) {
-        // handled in sendCard
-    } else if (!textContent) {
+        try {
+            options.text = fs.readFileSync(options.textFile, 'utf8');
+            delete options.textFile; // Consumed
+        } catch (e) {
+            console.error(`Failed to read file: ${options.textFile}`);
+            process.exit(1);
+        }
+    } else if (!options.text) {
         try {
              const stdinText = await readStdin();
              if (stdinText.trim()) options.text = stdinText;
         } catch (e) {}
     }
 
-    if (!options.text && !options.textFile && !options.imagePath) {
+    if (!options.text && !options.imagePath) {
         console.error('Error: No content provided.');
         process.exit(1);
+    }
+
+    // Unescape newlines only if originally from CLI arg
+    if (fromCli && options.text) {
+        options.text = options.text.replace(/\\n/g, '\n');
+    }
+
+    // Phase 2: Feature Extraction (Auto-Title)
+    if (!options.title && options.text) {
+        const titleRegexes = [
+            /^#\s+(.+)(\r?\n|$)/,          // # Title
+            /^\*\*(.+)\*\*(\r?\n|$)/,      // **Title**
+            /^【(.+)】(\r?\n|$)/            // 【Title】
+        ];
+
+        for (const regex of titleRegexes) {
+            const match = options.text.match(regex);
+            if (match && match[1]) {
+                options.title = match[1].trim();
+                options.text = options.text.substring(match[0].length).trim();
+                console.log(`[Feishu-Card] Auto-extracted title: "${options.title}"`);
+                break;
+            }
+        }
     }
 
     // Validation: Check Color
