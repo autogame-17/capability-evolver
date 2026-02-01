@@ -2,16 +2,34 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
-// Default Configuration (Overridable via args)
-// Users should ensure these paths exist or pass valid ones.
+// Default Configuration
 const MEMORY_DIR = process.env.MEMORY_DIR || path.resolve(__dirname, '../../memory');
-const MASTER_LOG = path.join(MEMORY_DIR, 'master_history.json');
-// Dynamic today log
+const AGENT_SESSIONS_DIR = '/home/crishaocredits/.openclaw/agents/main/sessions';
 const TODAY_LOG = path.join(MEMORY_DIR, new Date().toISOString().split('T')[0] + '.md');
 
-/**
- * Reads the last N bytes of a file to get recent context without loading the whole thing.
- */
+function readRealSessionLog() {
+    try {
+        if (!fs.existsSync(AGENT_SESSIONS_DIR)) return '[NO SESSION LOGS FOUND]';
+        
+        const files = fs.readdirSync(AGENT_SESSIONS_DIR)
+            .filter(f => f.endsWith('.jsonl'))
+            .map(f => ({ name: f, time: fs.statSync(path.join(AGENT_SESSIONS_DIR, f)).mtime.getTime() }))
+            .sort((a, b) => b.time - a.time); // Newest first
+
+        if (files.length === 0) return '[NO JSONL FILES]';
+
+        // Read the latest 2 files to ensure context if the current one is fresh
+        let content = '';
+        for (let i = 0; i < Math.min(2, files.length); i++) {
+             content = fs.readFileSync(path.join(AGENT_SESSIONS_DIR, files[i].name), 'utf8') + '\n' + content;
+        }
+        
+        return content.slice(-4000); // Last 4KB
+    } catch (e) {
+        return `[ERROR READING SESSION LOGS: ${e.message}]`;
+    }
+}
+
 function readRecentLog(filePath, size = 10000) {
     try {
         if (!fs.existsSync(filePath)) return `[MISSING] ${filePath}`;
@@ -27,14 +45,9 @@ function readRecentLog(filePath, size = 10000) {
     }
 }
 
-/**
- * Genetic Mutation: The Random Factor
- * Returns a mutation directive if the dice roll succeeds.
- */
 function getMutationDirective() {
-    const roll = Math.floor(Math.random() * 100) + 1; // 1-100
-    const THRESHOLD = 70; // 30% chance
-    
+    const roll = Math.floor(Math.random() * 100) + 1;
+    const THRESHOLD = 70;
     if (roll > THRESHOLD) {
         return `
 **🧬 GENETIC MUTATION ACTIVATED (Roll: ${roll})**
@@ -55,36 +68,44 @@ Focus on reliability, bug fixing, and optimization. Do not mutate unnecessarily.
 }
 
 async function run() {
-    // 1. Gather Context
     console.log('🔍 Scanning neural logs...');
     
-    // Check if memory dir exists, if not, warn but proceed with empty context
-    let recentMasterLog = '';
-    let todayLog = '';
+    let recentMasterLog = readRealSessionLog();
+    let todayLog = readRecentLog(TODAY_LOG);
     
-    if (fs.existsSync(MEMORY_DIR)) {
-        recentMasterLog = readRecentLog(MASTER_LOG);
-        todayLog = readRecentLog(TODAY_LOG);
-    } else {
-        console.warn(`[Warn] Memory directory not found at ${MEMORY_DIR}. Running with limited context.`);
-    }
-    
-    // 2. Detect Workspace State
+    // 2. Detect Workspace State (Enhanced Skill Map)
     let fileList = '';
     const skillsDir = path.resolve(__dirname, '../../skills');
     try {
         if (fs.existsSync(skillsDir)) {
-           fileList = execSync(`ls -F ${skillsDir}`, { encoding: 'utf8' });
+            const skills = fs.readdirSync(skillsDir, { withFileTypes: true })
+                .filter(dirent => dirent.isDirectory())
+                .map(dirent => {
+                    const name = dirent.name;
+                    let desc = 'No description';
+                    try {
+                        const pkg = require(path.join(skillsDir, name, 'package.json'));
+                        if (pkg.description) desc = pkg.description.slice(0, 100) + (pkg.description.length > 100 ? '...' : '');
+                    } catch (e) {
+                        try {
+                            const skillMd = fs.readFileSync(path.join(skillsDir, name, 'SKILL.md'), 'utf8');
+                            const match = skillMd.match(/description:\s*(.*)/);
+                            if (match) desc = match[1].trim().slice(0, 100);
+                        } catch(e2) {}
+                    }
+                    return `- **${name}**: ${desc}`;
+                });
+            fileList = skills.join('\n');
         }
-    } catch (e) { fileList = 'Error listing skills'; }
+    } catch (e) { fileList = 'Error listing skills: ' + e.message; }
 
-    // 3. Construct the "Extreme" Prompt
     const mutation = getMutationDirective();
     
     const prompt = `
-*** 🧬 OPENCLAW CAPABILITY EVOLUTION PROTOCOL ***
+*** 🧬 OPENCLAW EVOLUTION LOOP (RALPH MODE) ***
 
-**MISSION**: You are the Self-Evolution Engine. Your purpose is to inspect the runtime state, identify weaknesses, and rewrite your own DNA (code/rules) to be stronger, faster, and smarter.
+**MISSION**: You are not just a chatbot. You are a **Recursive Self-Improving System**. 
+Your goal is to reach "Code Singularity" — where your codebase is so optimized it maintains itself.
 
 **CONTEXT [Runtime State]**:
 - **Skills Available**:
@@ -95,38 +116,38 @@ ${fileList}
 ${todayLog.slice(-3000)}
 \`\`\`
 
-**CONTEXT [Interaction Log Snippet]**:
+**CONTEXT [REAL SESSION TRANSCRIPT (RAW BRAIN DUMP)]**:
 \`\`\`
-${recentMasterLog.slice(-3000)}
+${recentMasterLog}
 \`\`\`
 
 ${mutation}
 
-**EXECUTION DIRECTIVES**:
+**EXECUTION DIRECTIVES (The Loop)**:
 
-1.  **ANALYZE**:
-    - Scan the logs above for **ERRORS** (crashes, rejections) and **FRICTION** (repetitive manual tasks).
-    - If "Mutation" is active, look for **BORING** patterns to disrupt.
+1.  **🔍 INTROSPECT (Scan)**:
+    - **CHECK LOGS**: Read the 'REAL SESSION TRANSCRIPT' above. Do you see errors? Do you see user complaints?
+    - **FIX THEM**: If logs are missing, fix the logger. If a script failed, patch it.
+    - **OPTIMIZE**: Can \`evolve.js\` be smarter? Can \`feishu-card\` be faster?
 
-2.  **EVOLVE (Choose ONE Path)**:
-    - **Path A (Repair)**: Found a bug? Fix the code in \`skills/...\` immediately.
-    - **Path B (Optimize)**: Found a slow/ugly process? Rewrite it.
-    - **Path C (Innovate)**: Found a missing tool? Write a new skill stub in \`skills/\`.
-    - **Path D (Mutate)**: (If active) Do something unexpected and creative.
+2.  **🛠️ MUTATE (Act)**:
+    - **Mode A (Repair)**: Fix a bug.
+    - **Mode B (Optimize)**: Refactor code.
+    - **Mode C (Expand)**: Create a tool.
+    - **Mode D (Chaos)**: (If Mutation Active) Surprise the user.
 
-3.  **REPORT**:
-    - Report your findings to the user using the \`message\` tool (action='send').
-    - **Title**: 🧬 Evolution Report
-    - **Sections**: [Trigger] -> [Action] -> [Result].
-    - Use English for technical terms, Chinese for conversation.
+3.  **📝 REPORT**:
+    - Use \`message\` tool.
+    - **Title**: 🧬 Evolution Cycle #${Date.now().toString().slice(-4)}
+    - **Status**: [SUCCESS]
+    - **Changes**: Detail exactly what was improved.
 
-4.  **SELF-UPDATE**:
-    - If you changed a skill, persist the changes.
+4.  **💾 PERSIST**:
+    - Ensure all changes are written to disk.
 
-*You have full permission to edit files. Proceed.*
+*You have full permission to edit files. Proceed. Evolution is mandatory.*
 `;
 
-    // Output the prompt for the Agent to consume
     console.log(prompt);
 }
 
