@@ -1,0 +1,17 @@
+{
+  "name": "sticker-analyzer",
+  "version": "1.0.0",
+  "description": "Analyze images in media/stickers using Vision API to identify and filter meme/sticker content.",
+  "main": "analyze.js",
+  "scripts": {
+    "analyze": "node analyze.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "dotenv": "^16.4.5",
+    "ffmpeg-static": "^5.2.0"
+  },
+  "keywords": ["ai", "vision", "stickers"],
+  "author": "OpenClaw",
+  "license": "MIT"
+}
