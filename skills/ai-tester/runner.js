@@ -72,6 +72,24 @@ export class AITester {
     }
 
     /**
+     * Helper to retry async functions with exponential backoff
+     */
+    async _retry(fn, retries = 3, delay = 1000) {
+        for (let i = 0; i < retries; i++) {
+            try {
+                return await fn();
+            } catch (e) {
+                // Don't retry on auth errors or if we ran out of retries
+                if (i === retries - 1 || e.message?.includes('401') || e.message?.includes('INVALID_ARGUMENT')) throw e;
+                
+                this.log(`Attempt ${i + 1} failed: ${e.message}. Retrying in ${delay}ms...`);
+                await new Promise(r => setTimeout(r, delay));
+                delay *= 2; 
+            }
+        }
+    }
+
+    /**
      * Ask the LLM to analyze the current screen with a prompt.
      */
     async ask(prompt, systemPrompt = "You are a web automation assistant.") {
@@ -97,12 +115,14 @@ export class AITester {
         ];
 
         try {
-            const response = await this.openai.chat.completions.create({
-                model: this.modelName,
-                messages: messages,
-                max_tokens: 500,
-                temperature: 0.1,
-                response_format: { type: "json_object" }
+            const response = await this._retry(async () => {
+                return await this.openai.chat.completions.create({
+                    model: this.modelName,
+                    messages: messages,
+                    max_tokens: 500,
+                    temperature: 0.1,
+                    response_format: { type: "json_object" }
+                });
             });
 
             const content = response.choices[0].message.content;
@@ -127,7 +147,9 @@ export class AITester {
         };
 
         try {
-            const result = await model.generateContent([fullPrompt, imagePart]);
+            const result = await this._retry(async () => {
+                return await model.generateContent([fullPrompt, imagePart]);
+            });
             const text = result.response.text();
             return this._parseJSON(text);
         } catch (e) {
