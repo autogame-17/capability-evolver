@@ -15,10 +15,17 @@ program
   .description('Extract text from a PDF file')
   .argument('<file>', 'Path to the PDF file')
   .option('-o, --output <file>', 'Output file path (default: print to stdout)')
+  .option('--max-pages <number>', 'Maximum number of pages to parse (for large files)')
   .action(async (file, options) => {
     try {
       const dataBuffer = fs.readFileSync(file);
-      const data = await pdf(dataBuffer);
+      
+      const parseOptions = {};
+      if (options.maxPages) {
+          parseOptions.max = parseInt(options.maxPages);
+      }
+      
+      const data = await pdf(dataBuffer, parseOptions);
       
       if (options.output) {
         fs.writeFileSync(options.output, data.text);

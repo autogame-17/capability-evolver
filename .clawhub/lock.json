@@ -52,6 +52,10 @@
     "capability-evolver": {
       "version": "1.0.20",
       "installedAt": 1769944764213
+    },
+    "cursor-agent": {
+      "version": "2.1.0",
+      "installedAt": 1769947231024
     }
   }
 }

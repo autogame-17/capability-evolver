@@ -1,6 +1,6 @@
 {
   "name": "pdf-toolkit",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "PDF manipulation toolkit for OpenClaw",
   "main": "index.js",
   "bin": {
