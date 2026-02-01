@@ -426,7 +426,7 @@ async function run() {
     const memorySize = fs.existsSync(MEMORY_FILE) ? fs.statSync(MEMORY_FILE).size : 0;
 
     const prompt = `
-*** 🧬 OPENCLAW EVOLUTION LOOP (RALPH MODE) ***
+*** 🧬 OPENCLAW EVOLUTION LOOP (RALPH MODE) [${new Date().toISOString()}] ***
 
 **MISSION**: You are not just a chatbot. You are a **Recursive Self-Improving System**. 
 Your goal is to reach "Code Singularity" — where your codebase is so optimized it maintains itself.
