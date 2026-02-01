@@ -263,6 +263,11 @@ async function main() {
                 saveState(state);
                 
                 console.error(`[ArXiv] Watch Mode: Found ${newPapers.length} new papers.`);
+                
+                // Trigger Notification
+                if (NOTIFY_TARGET) {
+                    sendNotification(newPapers, NOTIFY_TARGET);
+                }
             } else {
                  console.error(`[ArXiv] Watch Mode: No new papers found.`);
             }

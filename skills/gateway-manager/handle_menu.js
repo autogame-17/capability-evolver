@@ -172,9 +172,11 @@ process.stdin.on('end', () => {
 
         if (eventKey === 'restart_gateway') {
             if (userId !== MASTER_ID) {
+                logAudit('restart_gateway', userId, false, 'Permission Denied');
                 sendFeedback(userId, 'Permission Denied', '🚫 Only Master can restart the gateway.', 'red');
                 return;
             }
+            logAudit('restart_gateway', userId, true, 'Initiated');
             sendFeedback(userId, 'Gateway Manager', '🚀 Restarting...', 'orange');
             execSync('openclaw gateway restart', { stdio: 'inherit' });
         } 
