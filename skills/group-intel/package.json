@@ -1,6 +1,6 @@
 {
   "name": "group-intel",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Periodically scans group chats, summarizes conversations, and reports intelligence.",
   "main": "report.js",
   "scripts": {
