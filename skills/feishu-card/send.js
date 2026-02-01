@@ -1,12 +1,14 @@
 const fs = require('fs');
 const { program } = require('commander');
 const path = require('path');
+const crypto = require('crypto');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') }); // Load workspace .env
 
 // Credentials from environment
 const APP_ID = process.env.FEISHU_APP_ID;
 const APP_SECRET = process.env.FEISHU_APP_SECRET;
 const TOKEN_CACHE_FILE = path.resolve(__dirname, '../../memory/feishu_token.json');
+const IMAGE_KEY_CACHE_FILE = path.resolve(__dirname, '../../memory/feishu_image_keys.json');
 
 if (!APP_ID || !APP_SECRET) {
     console.error('Error: FEISHU_APP_ID or FEISHU_APP_SECRET not set.');
@@ -61,12 +63,86 @@ async function getToken() {
     }
 }
 
+async function uploadImage(token, filePath) {
+    // Calculate hash for caching
+    let fileHash;
+    try {
+        const fileBuffer = fs.readFileSync(filePath);
+        fileHash = crypto.createHash('md5').update(fileBuffer).digest('hex');
+    } catch (e) {
+        console.error('Error reading image file:', e.message);
+        process.exit(1);
+    }
+
+    // Check Cache
+    let cache = {};
+    if (fs.existsSync(IMAGE_KEY_CACHE_FILE)) {
+        try { cache = JSON.parse(fs.readFileSync(IMAGE_KEY_CACHE_FILE, 'utf8')); } catch (e) {}
+    }
+    
+    if (cache[fileHash]) {
+        console.log(`Using cached image key (Hash: ${fileHash.substring(0,8)})`);
+        return cache[fileHash];
+    }
+
+    // Upload
+    console.log(`Uploading image (Hash: ${fileHash.substring(0,8)})...`);
+    
+    const formData = new FormData();
+    formData.append('image_type', 'message');
+    // Read entire file into Blob.
+    const fileContent = fs.readFileSync(filePath);
+    const blob = new Blob([fileContent]); 
+    formData.append('image', blob, path.basename(filePath));
+
+    try {
+        const res = await fetch('https://open.feishu.cn/open-apis/im/v1/images', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${token}`
+                // Content-Type header is automatically set by FormData with boundary
+            },
+            body: formData
+        });
+        const data = await res.json();
+        
+        if (data.code !== 0) {
+            throw new Error(JSON.stringify(data));
+        }
+        
+        const imageKey = data.data.image_key;
+        
+        // Update Cache
+        cache[fileHash] = imageKey;
+        try { fs.writeFileSync(IMAGE_KEY_CACHE_FILE, JSON.stringify(cache, null, 2)); } catch(e) {}
+        
+        return imageKey;
+    } catch (e) {
+        console.error('Image upload failed:', e.message);
+        process.exit(1);
+    }
+}
+
 async function sendCard(options) {
     const token = await getToken();
     
     // Construct Card Elements
     const elements = [];
     
+    // 1. Image (Top priority if desired, or we can make order configurable. For now: Top)
+    if (options.imagePath) {
+        const imageKey = await uploadImage(token, options.imagePath);
+        elements.push({
+            tag: 'img',
+            img_key: imageKey,
+            alt: {
+                tag: 'plain_text',
+                content: options.imageAlt || 'Image'
+            },
+            mode: 'fit_horizontal' // fit_horizontal, crop_center
+        });
+    }
+
     let contentText = '';
 
     if (options.textFile) {
@@ -195,7 +271,9 @@ program
   .option('--button-text <text>', 'Bottom button text')
   .option('--button-url <url>', 'Bottom button URL')
   .option('--text-size <size>', 'Text size (normal/heading/heading-1/etc)')
-  .option('--text-align <align>', 'Text alignment (left/center/right)');
+  .option('--text-align <align>', 'Text alignment (left/center/right)')
+  .option('--image-path <path>', 'Path to local image to embed')
+  .option('--image-alt <text>', 'Alt text for image');
 
 program.parse(process.argv);
 const options = program.opts();
@@ -213,10 +291,11 @@ async function readStdin() {
     let textContent = options.text;
 
     // Priority: --text-file > --text > STDIN
+    // Note: STDIN only fills "text" if image is NOT provided, OR if user wants both.
+    // If image is present, text is optional.
+
     if (options.textFile) {
-        // Handled inside sendCard currently, but let's unify or leave as is
-        // logic below inside sendCard handles textFile vs text. 
-        // We only need to polyfill text from stdin if both are missing.
+        // Handled inside sendCard
     } else if (!textContent) {
         try {
              const stdinText = await readStdin();
@@ -228,8 +307,9 @@ async function readStdin() {
         }
     }
 
-    if (!options.text && !options.textFile) {
-        console.error('Error: Either --text, --text-file, or STDIN content must be provided.');
+    // Requirement: Must have at least one content type (Text OR Image)
+    if (!options.text && !options.textFile && !options.imagePath) {
+        console.error('Error: Either --text, --text-file, --image-path, or STDIN content must be provided.');
         process.exit(1);
     }
 
