@@ -26,11 +26,19 @@ fi
 if [ -n "$(git status --porcelain)" ]; then
   echo "Changes detected. Committing to $CURRENT_BRANCH..."
   git add .
-  if git commit -m "$MSG"; then
+  
+  # Capture commit output to handle "nothing to commit" gracefully
+  if COMMIT_OUT=$(git commit -m "$MSG" 2>&1); then
     echo "Commit successful."
   else
-    echo "Commit failed."
-    exit 1
+    # Check if failure was due to empty commit (e.g. dirty submodules)
+    if echo "$COMMIT_OUT" | grep -E "nothing to commit|no changes added to commit"; then
+        echo "⚠️  Skipping commit: No stageable changes (check for dirty submodules)."
+    else
+        echo "❌ Commit failed:"
+        echo "$COMMIT_OUT"
+        exit 1
+    fi
   fi
 fi
 
