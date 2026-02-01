@@ -35,7 +35,15 @@ if (daysFlagIndex !== -1 && ARGS[daysFlagIndex + 1]) {
     }
 }
 
-// Parse flags
+// Parse --notify flag
+let NOTIFY_TARGET = null;
+const notifyIndex = ARGS.indexOf('--notify');
+if (notifyIndex !== -1 && ARGS[notifyIndex + 1]) {
+    NOTIFY_TARGET = ARGS[notifyIndex + 1];
+    ARGS.splice(notifyIndex, 2);
+}
+
+// Parse --watch flag
 const WATCH_MODE = ARGS.includes('--watch');
 if (WATCH_MODE) {
     const watchIndex = ARGS.indexOf('--watch');
@@ -63,6 +71,53 @@ function loadState() {
 
 function saveState(state) {
     try { fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2)); } catch (e) {}
+}
+
+function sendNotification(papers, target) {
+    try {
+        const { spawn } = require('child_process');
+        // Resolve path to feishu-card skill relative to this script
+        const cardPath = path.resolve(__dirname, '../feishu-card/send.js');
+        
+        if (!fs.existsSync(cardPath)) {
+            console.error("[ArXiv] Warning: feishu-card skill not found. Notification skipped.");
+            return;
+        }
+
+        // Construct Card Text
+        // Use Lark Markdown syntax
+        let text = `Found **${papers.length}** new papers for query: \`${QUERY}\`\n---\n`;
+        
+        // Show top 5
+        papers.slice(0, 5).forEach(p => {
+            const pdf = p.pdf_link || '#';
+            const title = p.title.replace(/\*/g, ''); // Escape asterisks in title
+            text += `📄 **[${title}](${pdf})**\n`;
+            text += `👤 *${p.authors.slice(0, 2).join(', ')}${p.authors.length > 2 ? ' et al.' : ''}* | \`${p.category}\`\n\n`;
+        });
+        
+        if (papers.length > 5) {
+            text += `*...and ${papers.length - 5} more.*`;
+        }
+
+        console.error(`[ArXiv] Sending notification to ${target}...`);
+        
+        // Spawn detached process to send card
+        const child = spawn('node', [
+            cardPath, 
+            '--target', target, 
+            '--text', text, 
+            '--title', '📚 ArXiv Watcher Alert',
+            '--color', 'blue' 
+        ], {
+            detached: true,
+            stdio: 'ignore'
+        });
+        child.unref();
+        
+    } catch (e) {
+        console.error(`[ArXiv] Failed to send notification: ${e.message}`);
+    }
 }
 
 async function fetchWithRetry(url, options = {}, retries = 3) {

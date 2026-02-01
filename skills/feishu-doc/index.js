@@ -5,6 +5,7 @@ const { fetchSheetContent } = require('./lib/sheet');
 const { fetchBitableContent } = require('./lib/bitable');
 const fs = require('fs');
 const path = require('path');
+const { promises: fsPromises } = fs;
 
 const CACHE_DIR = path.join(__dirname, 'cache');
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
@@ -38,12 +39,13 @@ async function main() {
     // Ensure cache dir exists
     if (!fs.existsSync(CACHE_DIR)) {
       fs.mkdirSync(CACHE_DIR, { recursive: true });
-    } else {
-      // Probabilistic cleanup (10% chance) to prevent infinite growth
-      // We do this BEFORE fetching to keep the disk tidy.
-      if (Math.random() < 0.1) {
-        cleanCache();
-      }
+    }
+
+    // Optimization: Run cleanup concurrently with logic (latency masking)
+    // Only run probabilistic cleanup (10%)
+    let cleanupPromise = Promise.resolve();
+    if (Math.random() < 0.1) {
+       cleanupPromise = cleanCacheAsync().catch(err => console.error(`[Cleanup Warning] ${err.message}`));
     }
 
     // Attempt cache read
@@ -66,6 +68,9 @@ async function main() {
           cachedData._source = "cache";
           cachedData._cachedAt = stats.mtime;
           console.log(JSON.stringify(cachedData, null, 2));
+          
+          // Wait for cleanup before exiting (since we are fast anyway)
+          await cleanupPromise;
           clearTimeout(watchdog);
           return;
         }
@@ -93,6 +98,9 @@ async function main() {
 
     // Output JSON result
     console.log(JSON.stringify(result, null, 2));
+
+    // Ensure cleanup is done (usually instant if started early)
+    await cleanupPromise;
 
   } catch (error) {
     console.log(JSON.stringify({ error: error.message, stack: error.stack, status: "failed" }));
@@ -164,28 +172,29 @@ async function processUrl(url, accessToken) {
   }
 }
 
-function cleanCache() {
+async function cleanCacheAsync() {
   try {
-    const files = fs.readdirSync(CACHE_DIR);
+    const files = await fsPromises.readdir(CACHE_DIR);
     const now = Date.now();
     // Delete files older than 1 hour (3600000 ms)
     const MAX_AGE = 60 * 60 * 1000;
     
-    for (const file of files) {
-      if (!file.endsWith('.json')) continue;
-      // Skip token.json if it exists here (though it should be in cache/token.json, better safe)
-      if (file === 'token.json') continue;
+    // Process files in parallel chunks or just all at once (since just unlink)
+    // Use Promise.allSettled to ensure one failure doesn't stop others
+    await Promise.allSettled(files.map(async (file) => {
+      if (!file.endsWith('.json')) return;
+      if (file === 'token.json') return;
 
       const filePath = path.join(CACHE_DIR, file);
       try {
-        const stats = fs.statSync(filePath);
+        const stats = await fsPromises.stat(filePath);
         if (now - stats.mtimeMs > MAX_AGE) {
-           fs.unlinkSync(filePath);
+           await fsPromises.unlink(filePath);
         }
       } catch (e) {
-        // Ignore individual file errors
+        // Ignore individual file errors (file might be gone)
       }
-    }
+    }));
   } catch (err) {
     // Ignore directory scan errors
   }

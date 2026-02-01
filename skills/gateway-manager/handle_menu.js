@@ -59,6 +59,17 @@ function getMasterId() {
     return defaultMaster;
 }
 
+function logAudit(action, userId, success, details = '') {
+    const auditPath = path.join(MEMORY_DIR, 'admin_audit.log');
+    const timestamp = new Date().toISOString();
+    const line = `[${timestamp}] User:${userId} Action:${action} Success:${success} ${details}\n`;
+    try {
+        fs.appendFileSync(auditPath, line);
+    } catch (e) {
+        console.error(`[GatewayManager] Failed to write audit log: ${e.message}`);
+    }
+}
+
 function sendFeedback(targetId, title, text, color = 'blue') {
     try {
         const scriptPath = getSkillScript('feishu-card', 'send.js');
