@@ -44,6 +44,10 @@
     "ddg-search": {
       "version": "1.0.0",
       "installedAt": 1769893715702
+    },
+    "prompt-optimizer": {
+      "version": "1.0.0",
+      "installedAt": 1769919902765
     }
   }
 }

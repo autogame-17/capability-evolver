@@ -82,10 +82,20 @@ async function run() {
     console.log(`Analyzing ${currentFile}...`);
 
     try {
-      const prompt = `Analyze this image. Is it a "sticker" or "meme" suitable for use in a chat conversation as a reaction?
+      const prompt = `Analyze this image. 
+      First, determine if it is a "sticker" or "meme" suitable for use in a chat conversation as a reaction.
       It is NOT a sticker if it is a screenshot of UI, document, real photo of papers, or complex diagram.
       It IS a sticker if it is a character, anime face, meme, or expressive icon.
-      Reply with JSON ONLY: {"is_sticker": boolean, "reason": "string"}`;
+      
+      If it is a sticker, describe its EMOTION (e.g., happy, angry, confused, crying, smug) and KEYWORDS (e.g., cat, girl, computer, coffee).
+      
+      Reply with JSON ONLY: 
+      {
+        "is_sticker": boolean, 
+        "reason": "string",
+        "emotion": "string (or null if not sticker)",
+        "keywords": ["tag1", "tag2"] (or empty if not sticker)
+      }`;
 
       const imagePart = fileToGenerativePart(filePath, mimeType);
       const result = await model.generateContent([prompt, imagePart]);
@@ -94,20 +104,35 @@ async function run() {
       
       console.log(`Response: ${text}`);
 
-      let isSticker = false;
+      let analysis = {};
       try {
           const cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
-          const json = JSON.parse(cleanJson);
-          isSticker = json.is_sticker;
+          analysis = JSON.parse(cleanJson);
       } catch (e) {
-          console.error("JSON parse failed, assuming false");
+          console.error("JSON parse failed");
       }
 
-      if (!isSticker) {
+      if (!analysis.is_sticker) {
         console.log(`❌ Not a sticker. Moving to trash.`);
         fs.renameSync(filePath, path.join(TRASH_DIR, currentFile));
       } else {
-        console.log(`✅ Sticker confirmed.`);
+        console.log(`✅ Sticker confirmed: ${analysis.emotion} [${analysis.keywords?.join(', ')}]`);
+        
+        // Update index
+        const indexFile = path.join(STICKER_DIR, 'index.json');
+        let index = {};
+        if (fs.existsSync(indexFile)) {
+            try { index = JSON.parse(fs.readFileSync(indexFile, 'utf8')); } catch (e) {}
+        }
+        
+        index[currentFile] = {
+            path: filePath,
+            emotion: analysis.emotion,
+            keywords: analysis.keywords,
+            addedAt: Date.now()
+        };
+        
+        fs.writeFileSync(indexFile, JSON.stringify(index, null, 2));
       }
 
     } catch (e) {

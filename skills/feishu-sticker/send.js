@@ -131,11 +131,17 @@ async function sendSticker(options) {
         console.log('Using cached image_key:', imageKey);
     }
 
+    // Determine receive_id_type
+    let receiveIdType = 'open_id';
+    if (options.target.startsWith('oc_')) {
+        receiveIdType = 'chat_id';
+    }
+
     // Send
     try {
         const axios = require('axios');
         const res = await axios.post(
-            'https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id',
+            `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
             {
                 receive_id: options.target,
                 msg_type: 'image',
@@ -158,6 +164,45 @@ async function sendSticker(options) {
 program
   .requiredOption('-t, --target <open_id>', 'Target User Open ID')
   .option('-f, --file <path>', 'Specific image file path (optional)')
+  .option('-q, --query <text>', 'Search query (e.g., "angry cat", "happy")')
+  .option('-e, --emotion <emotion>', 'Filter by emotion (e.g., "happy", "sad")')
   .parse(process.argv);
 
-sendSticker(program.opts());
+async function findSticker(options) {
+    if (!options.query && !options.emotion) return null;
+    
+    // Call find.js as a subprocess to leverage its logic
+    try {
+        const findScript = path.join(__dirname, 'find.js');
+        let cmd = `node "${findScript}" --json --random`;
+        if (options.query) cmd += ` --query "${options.query}"`;
+        if (options.emotion) cmd += ` --emotion "${options.emotion}"`;
+        
+        const stdout = execSync(cmd).toString();
+        const result = JSON.parse(stdout);
+        
+        if (result.found && result.sticker && result.sticker.path) {
+            console.log(`Smart match: ${result.sticker.emotion} [${result.sticker.keywords}]`);
+            return result.sticker.path;
+        }
+    } catch (e) {
+        console.warn("Smart search failed, falling back to random:", e.message);
+    }
+    return null;
+}
+
+(async () => {
+    const opts = program.opts();
+    
+    // If query/emotion is provided, try to find a matching sticker
+    if (opts.query || opts.emotion) {
+        const foundPath = await findSticker(opts);
+        if (foundPath) {
+            opts.file = foundPath;
+        } else {
+            console.log("No matching sticker found, falling back to random.");
+        }
+    }
+    
+    await sendSticker(opts);
+})();
