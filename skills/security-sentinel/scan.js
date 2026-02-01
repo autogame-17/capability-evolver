@@ -4,6 +4,16 @@ const path = require("path");
 const foundThreats = [];
 const warnings = [];
 
+// Definition of Secret Patterns
+const secretPatterns = [
+    { name: "AWS Access Key", regex: /AKIA[0-9A-Z]{16}/ },
+    { name: "Private Key Block", regex: /-----BEGIN [A-Z]+ PRIVATE KEY-----/ },
+    { name: "Generic API Key (Variable)", regex: /(api_key|apiKey|API_KEY)\s*[:=]\s*['"][a-zA-Z0-9_\-]{20,}['"]/ },
+    { name: "Bearer Token", regex: /Bearer\s+[a-zA-Z0-9\-\._~\+\/]{20,}=*/ }, // Enforced min length to avoid false positives
+    { name: "OpenAI Key", regex: /sk-[a-zA-Z0-9]{20,}/ },
+    { name: "Feishu/Lark Tenant Token", regex: /t-[a-z0-9]{10,}/ } // Removed ou_ (User ID) as it's not a secret
+];
+
 // Helper: Check file existence
 function checkExists(filePath) {
     if (!fs.existsSync(filePath)) {
@@ -39,6 +49,9 @@ function recursiveScan(dir) {
         // Skip ignored directories
         if (['node_modules', '.git', 'media', 'dist', 'coverage', '.openclaw'].includes(file)) continue;
         
+        // Skip self
+        if (file === 'scan.js') continue;
+
         try {
             const stats = fs.statSync(fullPath);
             if (stats.isDirectory()) {

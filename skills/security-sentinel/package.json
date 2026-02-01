@@ -1,6 +1,6 @@
 {
   "name": "security-sentinel",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Scan the workspace for security vulnerabilities, exposed secrets, and misconfigurations.",
   "main": "scan.js",
   "scripts": {
