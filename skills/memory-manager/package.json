@@ -1,6 +1,6 @@
 {
   "name": "memory-manager",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Atomic updater for MEMORY.md with race condition handling.",
   "main": "update.js",
   "dependencies": {

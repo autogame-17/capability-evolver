@@ -2,10 +2,10 @@ const fs = require('fs');
 const path = require('path');
 const { program } = require('commander');
 
-// MAX RETRIES for lock acquisition
-const MAX_RETRIES = 10;
+// Configuration
+const MAX_RETRIES = 15;
 const RETRY_DELAY_MS = 200;
-const LOCK_STALE_MS = 10000; // 10s max lock time
+const LOCK_STALE_MS = 15000; // 15s max lock time (increased for safety)
 
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -16,37 +16,52 @@ function normalize(text) {
     return text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map(line => line.trimEnd()).join('\n');
 }
 
-// Atomic Locking via mkdir (POSIX atomic)
-// We use a directory as a lock because mkdir is atomic.
-function acquireLock(file) {
-    const lockPath = `${file}.lock`;
+/**
+ * Robust Async Lock Acquisition
+ * Uses mkdir (atomic) + stale check loop
+ */
+async function acquireLock(targetFile) {
+    const lockPath = `${targetFile}.lock`;
     let attempts = 0;
+
     while (attempts < MAX_RETRIES) {
         try {
-            // Check for stale lock
-            if (fs.existsSync(lockPath)) {
-                const stats = fs.statSync(lockPath);
-                if (Date.now() - stats.mtimeMs > LOCK_STALE_MS) {
-                    console.warn(`[Lock] Found stale lock ${lockPath}, removing...`);
-                    fs.rmdirSync(lockPath);
-                }
-            }
-            
             fs.mkdirSync(lockPath); // Atomic
             return lockPath;
         } catch (e) {
-            attempts++;
-            // console.log(`[Lock] Waiting for lock on ${file}...`);
-            const delay = RETRY_DELAY_MS + Math.floor(Math.random() * 50);
-            // Sync sleep simulation for simplicity or require deasync? No, we are async function safeUpdate.
-            // Wait, acquireLock needs to be async or we need sleepSync.
-            // We'll make safeUpdate call this and await sleep. But we are inside loop.
-            // Let's return null if fail, handle retry in caller? 
-            // Better: use fs.mkdirSync and if it fails (EEXIST), return null.
-            return null;
+            if (e.code !== 'EEXIST') throw e; // Unexpected error
+
+            // Lock exists. Check staleness.
+            try {
+                const stats = fs.statSync(lockPath);
+                const age = Date.now() - stats.mtimeMs;
+                
+                if (age > LOCK_STALE_MS) {
+                    console.warn(`[Lock] Found stale lock ${lockPath} (age: ${age}ms). Pruning...`);
+                    try {
+                        fs.rmdirSync(lockPath);
+                        console.log(`[Lock] Stale lock removed. Retrying immediately.`);
+                        continue; // Retry acquisition immediately
+                    } catch (rmErr) {
+                        // Someone else might have removed it or claimed it. 
+                        // Just fall through to wait/retry.
+                    }
+                }
+            } catch (statErr) {
+                // Lock might have been removed between mkdir failure and stat.
+                // This is good! Retry immediately.
+                continue;
+            }
         }
+
+        // Wait and retry
+        attempts++;
+        const delay = RETRY_DELAY_MS + Math.floor(Math.random() * 100); // Jitter
+        // console.log(`[Lock] Waiting ${delay}ms... (${attempts}/${MAX_RETRIES})`);
+        await sleep(delay);
     }
-    throw new Error(`Could not acquire lock for ${file} after ${MAX_RETRIES} attempts.`);
+
+    throw new Error(`Could not acquire lock for ${targetFile} after ${MAX_RETRIES} attempts.`);
 }
 
 function releaseLock(lockPath) {
@@ -55,111 +70,95 @@ function releaseLock(lockPath) {
             fs.rmdirSync(lockPath);
         }
     } catch (e) {
-        console.error(`[Lock] Failed to release lock: ${e.message}`);
+        // Ignore errors on release (e.g. if already gone)
     }
 }
 
 async function safeUpdate(filePath, options) {
     const absPath = path.resolve(filePath);
     let lockPath = null;
-    let attempts = 0;
 
-    while (attempts < MAX_RETRIES) {
-        attempts++;
-        try {
-            // 1. Acquire Lock
-            lockPath = `${absPath}.lock`;
-            try {
-                if (fs.existsSync(lockPath)) {
-                     const stats = fs.statSync(lockPath);
-                     if (Date.now() - stats.mtimeMs > LOCK_STALE_MS) {
-                         console.warn(`[Lock] Pruning stale lock.`);
-                         fs.rmdirSync(lockPath);
-                     }
-                }
-                fs.mkdirSync(lockPath);
-            } catch (e) {
-                // Lock busy
-                if (attempts === MAX_RETRIES) throw new Error("Lock acquisition timeout");
-                const delay = RETRY_DELAY_MS + Math.floor(Math.random() * 100);
-                await sleep(delay);
-                continue;
-            }
-
-            // CRITICAL SECTION START
-            
-            // 2. Read fresh content
-            if (!fs.existsSync(absPath)) {
-                if (options.operation === 'create') {
-                    fs.writeFileSync(absPath, '', 'utf8');
-                } else {
-                    throw new Error(`File not found: ${absPath}`);
-                }
-            }
-            
-            let content = fs.readFileSync(absPath, 'utf8');
-            
-            // 3. Apply changes
-            let modified = false;
-
-            if (options.operation === 'replace') {
-                const search = (options.old !== undefined) ? options.old : options.search;
-                const replace = (options.new !== undefined) ? options.new : options.replace;
-                
-                if (search === undefined || replace === undefined) throw new Error("Replace requires --old and --new");
-
-                // Try exact match
-                if (content.includes(search)) {
-                    content = content.replace(search, replace);
-                    modified = true;
-                    console.log("Status: Exact match successful.");
-                } else {
-                    // Try normalized match
-                    const normContent = normalize(content);
-                    const normSearch = normalize(search);
-                    if (normContent.includes(normSearch)) {
-                         // This is tricky because replacing in normalized string doesn't map back to original easily.
-                         // But if we just overwrite with normalized content, it might be okay for Markdown.
-                         // For safety, let's just stick to "Exact Match" usually, or simple replacement.
-                         // Actually, the original code normalized *content* then wrote it back.
-                         // That changes line endings/whitespace for the WHOLE file.
-                         // We will keep that behavior for consistency.
-                         content = normalize(content).replace(normSearch, replace);
-                         modified = true;
-                         console.log("Status: Normalized match successful.");
-                    } else {
-                        console.error("Error: Text not found.");
-                        process.exit(1);
-                    }
-                }
-            } else if (options.operation === 'append') {
-                if (!options.content) throw new Error("Append requires --content");
-                if (!content.endsWith('\n') && content.length > 0) content += '\n';
-                content += options.content + '\n';
-                modified = true;
-                console.log("Status: Append successful.");
-            }
-
-            // 4. Write back
-            if (modified) {
-                // Atomic Write via rename for extra safety
-                const tempPath = `${absPath}.tmp`;
-                fs.writeFileSync(tempPath, content, 'utf8');
-                fs.renameSync(tempPath, absPath);
-                console.log("Success: Memory file updated safely.");
+    try {
+        // 1. Acquire Lock
+        lockPath = await acquireLock(absPath);
+        
+        // CRITICAL SECTION START
+        
+        // 2. Read fresh content
+        if (!fs.existsSync(absPath)) {
+            if (options.operation === 'create') {
+                fs.writeFileSync(absPath, '', 'utf8');
             } else {
-                console.log("No changes needed.");
+                throw new Error(`File not found: ${absPath}`);
             }
-            
-            // CRITICAL SECTION END
-            return; // Done
-
-        } catch (e) {
-            console.error(`Attempt ${attempts} failed: ${e.message}`);
-            if (attempts >= MAX_RETRIES) process.exit(1);
-        } finally {
-            if (lockPath) releaseLock(lockPath);
         }
+        
+        let content = fs.readFileSync(absPath, 'utf8');
+        
+        // 3. Apply changes
+        let modified = false;
+
+        if (options.operation === 'replace') {
+            const search = (options.old !== undefined) ? options.old : options.search;
+            const replace = (options.new !== undefined) ? options.new : options.replace;
+            
+            if (search === undefined || replace === undefined) throw new Error("Replace requires --old and --new");
+
+            // Try exact match first
+            if (content.includes(search)) {
+                content = content.replace(search, replace);
+                modified = true;
+                console.log("Status: Exact match successful.");
+            } else {
+                // Try normalized match
+                const normContent = normalize(content);
+                const normSearch = normalize(search);
+                if (normContent.includes(normSearch)) {
+                     // Note: We replace in the normalized version, effectively re-formatting the whole file.
+                     // This is acceptable for Markdown files to maintain consistency.
+                     content = normContent.replace(normSearch, replace);
+                     modified = true;
+                     console.log("Status: Normalized match successful.");
+                } else {
+                    console.error("Error: Text not found.");
+                    if (lockPath) releaseLock(lockPath);
+                    process.exit(1);
+                }
+            }
+        } else if (options.operation === 'append') {
+            if (!options.content) throw new Error("Append requires --content");
+            // Ensure newline before append if file not empty
+            if (content.length > 0 && !content.endsWith('\n')) content += '\n';
+            content += options.content + '\n';
+            modified = true;
+            console.log("Status: Append successful.");
+        } else if (options.operation === 'create') {
+            // Already handled creation above, check content?
+            if (options.content) {
+                content = options.content;
+                if (!content.endsWith('\n')) content += '\n';
+                modified = true;
+            }
+        }
+
+        // 4. Write back
+        if (modified) {
+            // Atomic Write via rename for extra safety (prevents partial reads by others)
+            const tempPath = `${absPath}.tmp`;
+            fs.writeFileSync(tempPath, content, 'utf8');
+            fs.renameSync(tempPath, absPath);
+            console.log("Success: Memory file updated safely.");
+        } else {
+            console.log("No changes needed.");
+        }
+        
+        // CRITICAL SECTION END
+
+    } catch (e) {
+        console.error(`Update failed: ${e.message}`);
+        process.exit(1);
+    } finally {
+        if (lockPath) releaseLock(lockPath);
     }
 }
 
