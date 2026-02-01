@@ -111,7 +111,7 @@ async function sendSticker(options) {
     const token = await getToken();
     const stickerDir = process.env.STICKER_DIR 
         ? path.resolve(process.env.STICKER_DIR) 
-        : path.resolve('/home/crishaocredits/.openclaw/media/stickers');
+        : path.resolve(path.join(process.env.HOME || '/home/crishaocredits', '.openclaw/media/stickers'));
     let selectedFile;
 
     if (options.file) {
@@ -140,6 +140,7 @@ async function sendSticker(options) {
             // -loop 0 ensures animation loops are preserved
             // -c:v libwebp, -lossless 0 (lossy), -q:v 75 (quality), -an (remove audio)
             // -vsync 0 prevents frame duplication issues
+            // -vf "scale='min(320,iw)':-1" to downscale huge gifs while keeping aspect ratio
             const ffmpegArgs = [
                 '-i', selectedFile,
                 '-c:v', 'libwebp',
@@ -147,21 +148,26 @@ async function sendSticker(options) {
                 '-q:v', '75',
                 '-loop', '0',
                 '-an',
-                '-vsync', '0',
+                '-vsync', '0', 
+                '-vf', 'scale=\'min(320,iw)\':-2', // Downscale safely if width > 320, keeping even dims
                 '-y',
                 webpPath
             ];
             spawnSync(ffmpegPath, ffmpegArgs, { stdio: 'pipe' });
             
             if (fs.existsSync(webpPath)) {
-                // Determine if we should delete the original
-                // If it's in our sticker stash, yes. If it's a user-provided path outside, maybe/maybe not.
-                // Assuming safer to replace for protocol compliance.
-                try {
-                    fs.unlinkSync(selectedFile);
-                    console.log('Original GIF deleted.');
-                } catch (delErr) {
-                    console.warn('Could not delete original GIF:', delErr.message);
+                // SAFETY CHECK: Only delete if it's in our internal sticker stash
+                const isInStickerDir = path.resolve(selectedFile).startsWith(stickerDir);
+                
+                if (isInStickerDir) {
+                    try {
+                        fs.unlinkSync(selectedFile);
+                        console.log('Original GIF deleted (Internal Storage Cleanup).');
+                    } catch (delErr) {
+                        console.warn('Could not delete original GIF:', delErr.message);
+                    }
+                } else {
+                    console.log('External file detected. Preserving original GIF.');
                 }
                 selectedFile = webpPath;
             }

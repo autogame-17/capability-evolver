@@ -53,9 +53,15 @@ async function run() {
         console.log(`
 *** SYSTEM OVERRIDE: ENHANCED REPORTING MODE ***
 Instead of using the generic \`message\` tool for reporting, you MUST use the \`feishu-card\` skill.
-- **Tool**: \`exec: node skills/feishu-card/send.js ...\`
-- **Style**: Rich Text, Color Headers (Purple for Evolution).
-- **Target**: Auto-detect (Group or DM).
+
+**REQUIRED ACTION (Step 3)**:
+Run this specific command to report your progress:
+\`\`\`bash
+node skills/feishu-card/send.js --title "🧬 Evolution Cycle Completed" --color purple --text "Status: [SUCCESS]\nChanges: ... (Describe changes here)"
+\`\`\`
+
+- **Target**: Auto-detects context (Group or DM).
+- **Fallback**: If this fails, standard logs will capture it.
 `);
 
     } catch (e) {

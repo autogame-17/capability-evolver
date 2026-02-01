@@ -28,11 +28,25 @@ function formatSessionLog(jsonlContent) {
                     } else {
                         content = JSON.stringify(data.message.content);
                     }
+                    
+                    // Filter: Skip Heartbeats to save noise
+                    if (content.trim() === 'HEARTBEAT_OK') return null;
+                    if (content.includes('NO_REPLY')) return null;
+
                     // Clean up newlines for compact reading
                     content = content.replace(/\n+/g, ' ').slice(0, 300);
                     return `**${role}**: ${content}`;
                 }
                 if (data.type === 'tool_result' || (data.message && data.message.role === 'toolResult')) {
+                     // Filter: Skip generic success results or short uninformative ones
+                     // Only show error or significant output
+                     let resContent = '';
+                     if (data.tool_result && data.tool_result.output) resContent = data.tool_result.output;
+                     if (data.content) resContent = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+                     
+                     if (resContent.length < 50 && (resContent.includes('success') || resContent.includes('done'))) return null;
+                     if (resContent.trim() === '') return null;
+                     
                      return `[TOOL RESULT]`;
                 }
                 return null;
