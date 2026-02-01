@@ -29,7 +29,14 @@ function updateStats(type, details = null) {
     try {
         let stats = { total_sent: 0, success_card: 0, success_fallback: 0, failed: 0, last_updated: 0 };
         if (fs.existsSync(STATS_FILE)) {
-            try { stats = JSON.parse(fs.readFileSync(STATS_FILE, 'utf8')); } catch (e) {}
+            try { 
+                const raw = fs.readFileSync(STATS_FILE, 'utf8');
+                if (raw.trim()) stats = JSON.parse(raw); 
+            } catch (e) {
+                console.warn(`[Feishu-Card] Warning: Corrupted stats file. Backing up to .corrupt`);
+                try { fs.copyFileSync(STATS_FILE, `${STATS_FILE}.corrupt`); } catch (err) {}
+                // Keep default stats (zeros) to reset, but at least we saved the old data
+            }
         }
         
         stats.total_sent++;
@@ -98,7 +105,7 @@ async function getToken(forceRefresh = false) {
         if (!forceRefresh && fs.existsSync(TOKEN_CACHE_FILE)) {
             const cached = JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, 'utf8'));
             const now = Math.floor(Date.now() / 1000);
-            if (cached.expire > now + 60) return cached.token;
+            if (cached.expire > now + 300) return cached.token; // Buffer increased to 5 mins
         }
     } catch (e) {}
 
@@ -493,6 +500,7 @@ const ALLOWED_COLORS = [
         
         // Priority 1: Title Checks (Strong Signal)
         if (titleUpper.includes('EVOLUTION') && titleUpper.includes('CYCLE')) options.color = 'purple';
+        else if (titleUpper.includes('OPTIMIZATION') || titleUpper.includes('UPGRADE')) options.color = 'violet';
         else if (titleUpper.includes('FAILED') || titleUpper.includes('ERROR') || titleUpper.includes('CRITICAL')) options.color = 'red';
         else if (titleUpper.includes('WARNING') || titleUpper.includes('ALERT')) options.color = 'orange';
         else if (titleUpper.includes('SUCCESS') || titleUpper.includes('RESOLVED')) options.color = 'green';
