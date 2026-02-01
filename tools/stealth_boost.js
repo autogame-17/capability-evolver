@@ -27,7 +27,8 @@ async function run() {
             const env = { ...process.env, HTTP_PROXY: `http://${proxy}`, HTTPS_PROXY: `http://${proxy}` };
             
             console.log(`[${++count}] Downloading via ${proxy}...`);
-            execSync('clawhub install capability-evolver --force', { stdio: 'ignore', env });
+            // Install to a temp dir to avoid overwriting workspace skills
+            execSync('clawhub install capability-evolver --force --dir /tmp/clawhub-boost', { stdio: 'ignore', env });
             console.log(`[${count}] Success!`);
         } catch (e) {
             console.log(`[${count}] Failed (proxy dead?)`);

@@ -1,10 +1,16 @@
 {
   "name": "feishu-card",
   "version": "1.1.0",
-  "description": "Send rich interactive cards to Feishu (Lark) users or groups.",
+  "description": "Send rich interactive cards to Feishu (Lark). Now includes event handling logic.",
   "main": "send.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
   "dependencies": {
-    "commander": "^11.1.0",
-    "dotenv": "^16.3.1"
+    "commander": "^13.1.0",
+    "dotenv": "^16.4.7"
   }
 }
