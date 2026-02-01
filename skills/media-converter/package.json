@@ -1,0 +1,21 @@
+{
+  "name": "media-converter",
+  "version": "1.0.0",
+  "description": "Media file type detection and conversion utility.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mime",
+    "magic",
+    "convert",
+    "gif",
+    "png"
+  ],
+  "author": "OpenClaw Agent",
+  "license": "ISC",
+  "dependencies": {
+    "jimp": "^0.22.10"
+  }
+}
