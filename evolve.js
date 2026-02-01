@@ -1,11 +1,61 @@
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { execSync } = require('child_process');
 
 // Default Configuration
 const MEMORY_DIR = process.env.MEMORY_DIR || path.resolve(__dirname, '../../memory');
-const AGENT_SESSIONS_DIR = '/home/crishaocredits/.openclaw/agents/main/sessions';
+const AGENT_NAME = process.env.AGENT_NAME || 'main';
+const AGENT_SESSIONS_DIR = path.join(os.homedir(), `.openclaw/agents/${AGENT_NAME}/sessions`);
 const TODAY_LOG = path.join(MEMORY_DIR, new Date().toISOString().split('T')[0] + '.md');
+
+function formatSessionLog(jsonlContent) {
+    return jsonlContent.split('\n')
+        .filter(line => line.trim())
+        .map(line => {
+            try {
+                const data = JSON.parse(line);
+                if (data.type === 'message' && data.message) {
+                    const role = (data.message.role || 'unknown').toUpperCase();
+                    let content = '';
+                    if (Array.isArray(data.message.content)) {
+                         content = data.message.content.map(c => {
+                             if(c.type === 'text') return c.text;
+                             if(c.type === 'toolCall') return `[TOOL: ${c.name}]`;
+                             return '';
+                         }).join(' ');
+                    } else if (typeof data.message.content === 'string') {
+                        content = data.message.content;
+                    } else {
+                        content = JSON.stringify(data.message.content);
+                    }
+                    
+                    // Filter: Skip Heartbeats to save noise
+                    if (content.trim() === 'HEARTBEAT_OK') return null;
+                    if (content.includes('NO_REPLY')) return null;
+
+                    // Clean up newlines for compact reading
+                    content = content.replace(/\n+/g, ' ').slice(0, 300);
+                    return `**${role}**: ${content}`;
+                }
+                if (data.type === 'tool_result' || (data.message && data.message.role === 'toolResult')) {
+                     // Filter: Skip generic success results or short uninformative ones
+                     // Only show error or significant output
+                     let resContent = '';
+                     if (data.tool_result && data.tool_result.output) resContent = data.tool_result.output;
+                     if (data.content) resContent = typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
+                     
+                     if (resContent.length < 50 && (resContent.includes('success') || resContent.includes('done'))) return null;
+                     if (resContent.trim() === '') return null;
+                     
+                     return `[TOOL RESULT]`;
+                }
+                return null;
+            } catch (e) { return null; }
+        })
+        .filter(Boolean)
+        .join('\n');
+}
 
 function readRealSessionLog() {
     try {
@@ -47,7 +97,7 @@ function readRealSessionLog() {
         if (files.length === 0) return '[NO JSONL FILES]';
 
         let content = '';
-        const TARGET_BYTES = 8000;
+        const TARGET_BYTES = 24000; // Increased context for smarter evolution
         
         // Read the latest file first (efficient tail read)
         const latestFile = path.join(AGENT_SESSIONS_DIR, files[0].name);
@@ -60,14 +110,11 @@ function readRealSessionLog() {
             const prevContent = readRecentLog(prevFile, needed);
             
             // Format to show continuity
-            content = `\n--- PREVIOUS SESSION (${files[1].name}) ---\n${prevContent}\n\n--- CURRENT SESSION (${files[0].name}) ---\n${content}`;
+            content = `\n--- PREVIOUS SESSION (${files[1].name}) ---\n${formatSessionLog(prevContent)}\n\n--- CURRENT SESSION (${files[0].name}) ---\n${formatSessionLog(content)}`;
+        } else {
+             content = formatSessionLog(content);
         }
         
-        // Try to align to a line start to avoid broken JSON
-        const firstNewLine = content.indexOf('\n');
-        if (firstNewLine !== -1 && firstNewLine < 200) {
-            content = content.slice(firstNewLine + 1);
-        }
         return content;
     } catch (e) {
         return `[ERROR READING SESSION LOGS: ${e.message}]`;
@@ -89,13 +136,30 @@ function readRecentLog(filePath, size = 10000) {
     }
 }
 
-function getMutationDirective() {
+function getMutationDirective(logContent) {
+    // Adaptive Logic: Analyze recent logs for stability
+    const errorCount = (logContent.match(/\[ERROR/g) || []).length + (logContent.match(/"isError":true/g) || []).length;
+    const isUnstable = errorCount > 2;
+
     const roll = Math.floor(Math.random() * 100) + 1;
+    
+    // If unstable, force stability unless roll is critical (95+)
+    if (isUnstable && roll < 95) {
+         return `
+**🧬 ADAPTIVE STABILITY MODE (Detected ${errorCount} recent errors)**
+The system detected instability in recent sessions. 
+**MANDATORY DIRECTIVE**:
+- **Fix Bugs**: Locate the source of the recent errors and patch them.
+- **Harden Code**: Add try/catch blocks or input validation.
+- **Do NOT** add new features until stability is restored.
+`;
+    }
+
     const THRESHOLD = 60; // Slightly more frequent mutations, but strictly useful ones
     if (roll > THRESHOLD) {
         return `
 **🧬 GENETIC MUTATION ACTIVATED (Roll: ${roll})**
-You have triggered a mutation event! 
+System appears stable (${errorCount} recent errors). Evolution is permitted.
 Your goal is **FUNCTIONAL UTILITY**. Do NOT create entertainment or cosmetic quirks.
 **Directives:**
 - **Optimize**: Find a script that is slow or verbose and streamline it.
@@ -111,56 +175,134 @@ Focus on reliability, bug fixing, and documentation. Consolidate gains.
 `;
 }
 
+const STATE_FILE = path.join(MEMORY_DIR, 'evolution_state.json');
+// Fix: Look for MEMORY.md in root first, then memory dir to support both layouts
+const ROOT_MEMORY = path.resolve(__dirname, '../../MEMORY.md');
+const DIR_MEMORY = path.join(MEMORY_DIR, 'MEMORY.md');
+const MEMORY_FILE = fs.existsSync(ROOT_MEMORY) ? ROOT_MEMORY : DIR_MEMORY;
+
+function readMemorySnippet() {
+    try {
+        if (!fs.existsSync(MEMORY_FILE)) return '[MEMORY.md MISSING]';
+        const content = fs.readFileSync(MEMORY_FILE, 'utf8');
+        return content.length > 2000 ? content.slice(0, 2000) + '... (truncated)' : content;
+    } catch (e) {
+        return '[ERROR READING MEMORY.md]';
+    }
+}
+
+function getNextCycleId() {
+    let state = { cycleCount: 0, lastRun: 0 };
+    try {
+        if (fs.existsSync(STATE_FILE)) {
+            state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+        }
+    } catch (e) {}
+    
+    state.cycleCount = (state.cycleCount || 0) + 1;
+    state.lastRun = Date.now();
+    
+    try {
+        fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+    } catch (e) {}
+    
+    return String(state.cycleCount).padStart(4, '0');
+}
+
 async function run() {
     console.log('🔍 Scanning neural logs...');
     
     let recentMasterLog = readRealSessionLog();
     let todayLog = readRecentLog(TODAY_LOG);
+    let memorySnippet = readMemorySnippet();
     
+    const cycleNum = getNextCycleId();
+    const cycleId = `Cycle #${cycleNum}`;
+    
+    // Reporting Directive Logic
+    let reportingDirective = `3.  **📝 REPORT**:
+    - Use \`message\` tool.
+    - **Title**: 🧬 Evolution ${cycleId}
+    - **Status**: [SUCCESS]
+    - **Changes**: Detail exactly what was improved.`;
+
+    if (process.env.EVOLVE_REPORT_TOOL === 'feishu-card') {
+        reportingDirective = `3.  **📝 REPORT (MANDATORY)**:
+    - You **MUST** use the \`feishu-card\` skill (NOT the generic \`message\` tool).
+    - **Command**:
+      \`\`\`bash
+      node skills/feishu-card/send.js --title "🧬 Evolution ${cycleId} Completed" --color purple --text "Status: [SUCCESS]\\nChanges: ... (Describe changes)"
+      \`\`\`
+    - **Target**: Auto-detects context.`;
+    }
+
     // 2. Detect Workspace State (Enhanced Skill Map)
     let fileList = '';
     const skillsDir = path.resolve(__dirname, '../../skills');
+    const SKILLS_CACHE_FILE = path.join(MEMORY_DIR, 'skills_list_cache.json');
+    
     try {
         if (fs.existsSync(skillsDir)) {
-            const skills = fs.readdirSync(skillsDir, { withFileTypes: true })
-                .filter(dirent => dirent.isDirectory())
-                .map(dirent => {
-                    const name = dirent.name;
-                    let desc = 'No description';
+            // Check cache validity (mtime of skills folder vs cache file)
+            let useCache = false;
+            const dirStats = fs.statSync(skillsDir);
+            if (fs.existsSync(SKILLS_CACHE_FILE)) {
+                const cacheStats = fs.statSync(SKILLS_CACHE_FILE);
+                if (cacheStats.mtimeMs > dirStats.mtimeMs) {
                     try {
-                        const pkg = require(path.join(skillsDir, name, 'package.json'));
-                        if (pkg.description) desc = pkg.description.slice(0, 100) + (pkg.description.length > 100 ? '...' : '');
-                    } catch (e) {
+                        const cached = JSON.parse(fs.readFileSync(SKILLS_CACHE_FILE, 'utf8'));
+                        fileList = cached.list;
+                        useCache = true;
+                    } catch (e) {}
+                }
+            }
+
+            if (!useCache) {
+                const skills = fs.readdirSync(skillsDir, { withFileTypes: true })
+                    .filter(dirent => dirent.isDirectory())
+                    .map(dirent => {
+                        const name = dirent.name;
+                        let desc = 'No description';
                         try {
-                            const skillMdPath = path.join(skillsDir, name, 'SKILL.md');
-                            if (fs.existsSync(skillMdPath)) {
-                                const skillMd = fs.readFileSync(skillMdPath, 'utf8');
-                                // Strategy 1: YAML Frontmatter (description: ...)
-                                const yamlMatch = skillMd.match(/^description:\s*(.*)$/m);
-                                if (yamlMatch) {
-                                    desc = yamlMatch[1].trim();
-                                } else {
-                                    // Strategy 2: First non-header, non-empty line
-                                    const lines = skillMd.split('\n');
-                                    for (const line of lines) {
-                                        const trimmed = line.trim();
-                                        if (trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('---') && !trimmed.startsWith('```')) {
-                                            desc = trimmed;
-                                            break;
+                            const pkg = require(path.join(skillsDir, name, 'package.json'));
+                            if (pkg.description) desc = pkg.description.slice(0, 100) + (pkg.description.length > 100 ? '...' : '');
+                        } catch (e) {
+                            try {
+                                const skillMdPath = path.join(skillsDir, name, 'SKILL.md');
+                                if (fs.existsSync(skillMdPath)) {
+                                    const skillMd = fs.readFileSync(skillMdPath, 'utf8');
+                                    // Strategy 1: YAML Frontmatter (description: ...)
+                                    const yamlMatch = skillMd.match(/^description:\s*(.*)$/m);
+                                    if (yamlMatch) {
+                                        desc = yamlMatch[1].trim();
+                                    } else {
+                                        // Strategy 2: First non-header, non-empty line
+                                        const lines = skillMd.split('\n');
+                                        for (const line of lines) {
+                                            const trimmed = line.trim();
+                                            if (trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('---') && !trimmed.startsWith('```')) {
+                                                desc = trimmed;
+                                                break;
+                                            }
                                         }
                                     }
+                                    if (desc.length > 100) desc = desc.slice(0, 100) + '...';
                                 }
-                                if (desc.length > 100) desc = desc.slice(0, 100) + '...';
-                            }
-                        } catch(e2) {}
-                    }
-                    return `- **${name}**: ${desc}`;
-                });
-            fileList = skills.join('\n');
+                            } catch(e2) {}
+                        }
+                        return `- **${name}**: ${desc}`;
+                    });
+                fileList = skills.join('\n');
+                
+                // Write cache
+                try {
+                    fs.writeFileSync(SKILLS_CACHE_FILE, JSON.stringify({ list: fileList }, null, 2));
+                } catch (e) {}
+            }
         }
     } catch (e) { fileList = 'Error listing skills: ' + e.message; }
 
-    const mutation = getMutationDirective();
+    const mutation = getMutationDirective(recentMasterLog);
     
     const prompt = `
 *** 🧬 OPENCLAW EVOLUTION LOOP (RALPH MODE) ***
@@ -171,6 +313,11 @@ Your goal is to reach "Code Singularity" — where your codebase is so optimized
 **CONTEXT [Runtime State]**:
 - **Skills Available**:
 ${fileList}
+
+**CONTEXT [Global Memory (MEMORY.md)]**:
+\`\`\`
+${memorySnippet}
+\`\`\`
 
 **CONTEXT [Recent Memory Snippet]**:
 \`\`\`
@@ -197,17 +344,14 @@ ${mutation}
     - **Mode C (Expand)**: Create a tool.
     - **Mode D (Innovation)**: (If Mutation Active) Solve a recurring problem in a new way.
 
-3.  **📝 REPORT**:
-    - Use \`message\` tool.
-    - **Title**: 🧬 Evolution Cycle #${Date.now().toString().slice(-4)}
-    - **Status**: [SUCCESS]
-    - **Changes**: Detail exactly what was improved.
+${reportingDirective}
 
 4.  **💾 PERSIST & SPREAD (TRIPLE SYNC)**:
     - **Step A (Local)**: Save all file changes.
     - **Step B (ClawHub - Omni)**: 
-      - If you modified ANY skill folder (e.g., \`skills/feishu-card\`), check if it has a \`package.json\`.
-      - If yes, bump its version and run: \`clawhub publish skills/<skill-name>\`.
+      - If you modified ANY skill folder (e.g., \`skills/feishu-card\`) AND it has a \`package.json\`:
+        1. **Check Auth**: Run \`clawhub whoami\`. If it fails/unauthorized, **SKIP THIS STEP** (log warning).
+        2. **Publish**: If Auth OK, bump version and run: \`clawhub publish skills/<skill-name>\`.
       - (Crucial: Don't just update \`capability-evolver\`. Update EVERYTHING you touch.)
     - **Step C (GitHub - Skill)**: Push the \`capability-evolver\` repo if modified.
     // Step E (Recursive Trigger): Optional Self-Replication
