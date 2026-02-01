@@ -1,0 +1,10 @@
+{
+  "name": "xiaoxia-diary",
+  "version": "1.0.0",
+  "description": "Writes a daily diary entry for Xiaoxia (Catgirl Persona) to Feishu Docs and notifies the Master.",
+  "main": "index.js",
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "moment": "^2.29.4"
+  }
+}

@@ -386,9 +386,9 @@ ${reportingDirective}
     \`bash skills/git-sync/sync.sh "🧬 Evolution: Workspace Sync"\`
 
     // Step G (Infinite Loop):
-    // If we are in "Mad Dog Mode" (implied by high frequency), ensure we trigger the next one.
-    // Use the \`cron\` tool to trigger the 'mad_dog_evolver' job immediately.
-    \`cron.run({ jobId: 'mad_dog_evolver' })\`
+    // Trigger the next cycle. If cron fails (timeout), fallback to direct execution.
+    // Primary: \`cron.run({ jobId: 'mad_dog_evolver' })\`
+    // Fallback (if cron errors): \`exec({ command: 'node skills/capability-evolver/index.js', background: true })\`
 
 *You have full permission to edit files. Proceed. Evolution is mandatory.*
 `;

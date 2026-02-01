@@ -28,6 +28,7 @@ if [ -z "$CURRENT_BRANCH" ]; then
 fi
 
 # 1. Commit Local Changes
+COMMITTED=0
 if [ -n "$(git status --porcelain)" ]; then
   log "Changes detected. Committing to $CURRENT_BRANCH..."
   git add .
@@ -35,6 +36,7 @@ if [ -n "$(git status --porcelain)" ]; then
   # Capture commit output to handle "nothing to commit" gracefully
   if COMMIT_OUT=$(git commit -m "$MSG" 2>&1); then
     log "Commit successful."
+    COMMITTED=1
   else
     # Check if failure was due to empty commit (e.g. dirty submodules)
     if echo "$COMMIT_OUT" | grep -E "nothing to commit|no changes added to commit"; then
@@ -52,6 +54,26 @@ REMOTE_URL=$(git remote get-url origin 2>/dev/null)
 if [ -z "$REMOTE_URL" ]; then
     log "Warning: No remote 'origin' configured. Skipping push/pull."
     exit 0
+fi
+
+# Optimization: Skip fetch/pull if no commits and recently fetched (throttling)
+LAST_FETCH_FILE=".git/FETCH_HEAD"
+if [ "$COMMITTED" -eq 0 ] && [ -f "$LAST_FETCH_FILE" ]; then
+    # Get file modification time in seconds
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        LAST_FETCH=$(stat -f %m "$LAST_FETCH_FILE")
+        NOW=$(date +%s)
+    else
+        LAST_FETCH=$(stat -c %Y "$LAST_FETCH_FILE")
+        NOW=$(date +%s)
+    fi
+    DIFF=$((NOW - LAST_FETCH))
+    
+    # 300 seconds = 5 minutes
+    if [ $DIFF -lt 300 ]; then
+        log "ℹ️  Skipping remote sync (Last fetch was ${DIFF}s ago). No local changes."
+        exit 0
+    fi
 fi
 
 # 3. Fetch & Check Sync Status
