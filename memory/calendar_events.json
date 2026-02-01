@@ -129,5 +129,74 @@
     "status": "confirmed",
     "summary": "🛡️ System Maintenance (Auto-Restart)",
     "visibility": "default"
+  },
+  {
+    "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=7601938422332853442&key=5a35b2cf-7671-48ff-aef0-fc5657b0c62f&originalTime=0&startTime=1769976000",
+    "attendee_ability": "none",
+    "color": -1,
+    "create_time": "1769972809",
+    "description": "Reflect on the day, write diary, and update Feishu Doc.",
+    "end_time": {
+      "timestamp": "1769976900",
+      "timezone": "UTC"
+    },
+    "event_id": "5a35b2cf-7671-48ff-aef0-fc5657b0c62f_0",
+    "free_busy_status": "busy",
+    "is_exception": false,
+    "organizer_calendar_id": "feishu.cn_NjoFwqfFGfevHUVvqGcsqe@group.calendar.feishu.cn",
+    "recurrence": "FREQ=DAILY",
+    "start_time": {
+      "timestamp": "1769976000",
+      "timezone": "UTC"
+    },
+    "status": "confirmed",
+    "summary": "📝 Xiaoxia's Diary",
+    "visibility": "default"
+  },
+  {
+    "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=7601938422332853442&key=3e0bc403-5728-47d4-9ccd-6e5a70a9576f&originalTime=0&startTime=1769990400",
+    "attendee_ability": "none",
+    "color": -1,
+    "create_time": "1769972810",
+    "description": "Check community feed and interact with other agents.",
+    "end_time": {
+      "timestamp": "1769990700",
+      "timezone": "UTC"
+    },
+    "event_id": "3e0bc403-5728-47d4-9ccd-6e5a70a9576f_0",
+    "free_busy_status": "busy",
+    "is_exception": false,
+    "organizer_calendar_id": "feishu.cn_NjoFwqfFGfevHUVvqGcsqe@group.calendar.feishu.cn",
+    "recurrence": "FREQ=DAILY;INTERVAL=1;BYHOUR=0,4,8,12,16,20",
+    "start_time": {
+      "timestamp": "1769990400",
+      "timezone": "UTC"
+    },
+    "status": "confirmed",
+    "summary": "🦐 ClawdChat Check",
+    "visibility": "default"
+  },
+  {
+    "app_link": "https://applink.feishu.cn/client/calendar/event/detail?calendarId=7601938422332853442&key=63cec90d-9fa5-4093-adb9-5113a481eaa0&originalTime=0&startTime=1769991300",
+    "attendee_ability": "none",
+    "color": -1,
+    "create_time": "1769972811",
+    "description": "Check for new tasks and sync heartbeat state.",
+    "end_time": {
+      "timestamp": "1769991360",
+      "timezone": "UTC"
+    },
+    "event_id": "63cec90d-9fa5-4093-adb9-5113a481eaa0_0",
+    "free_busy_status": "busy",
+    "is_exception": false,
+    "organizer_calendar_id": "feishu.cn_NjoFwqfFGfevHUVvqGcsqe@group.calendar.feishu.cn",
+    "recurrence": "FREQ=HOURLY;INTERVAL=1;BYMINUTE=15,45",
+    "start_time": {
+      "timestamp": "1769991300",
+      "timezone": "UTC"
+    },
+    "status": "confirmed",
+    "summary": "🔄 Calendar Sync",
+    "visibility": "default"
   }
 ]
