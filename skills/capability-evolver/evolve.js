@@ -97,7 +97,7 @@ function readRealSessionLog() {
         if (files.length === 0) return '[NO JSONL FILES]';
 
         let content = '';
-        const TARGET_BYTES = 24000; // Increased context for smarter evolution
+        const TARGET_BYTES = 64000; // Increased context (was 24000) for smarter evolution
         
         // Read the latest file first (efficient tail read)
         const latestFile = path.join(AGENT_SESSIONS_DIR, files[0].name);
@@ -186,7 +186,8 @@ function readMemorySnippet() {
     try {
         if (!fs.existsSync(MEMORY_FILE)) return '[MEMORY.md MISSING]';
         const content = fs.readFileSync(MEMORY_FILE, 'utf8');
-        return content.length > 2000 ? content.slice(0, 2000) + '... (truncated)' : content;
+        // Optimization: Increased limit from 2000 to 50000 for modern context windows
+        return content.length > 50000 ? content.slice(0, 50000) + `\n... [TRUNCATED: ${content.length - 50000} chars remaining]` : content;
     } catch (e) {
         return '[ERROR READING MEMORY.md]';
     }
@@ -220,6 +221,7 @@ function getNextCycleId() {
 }
 
 async function run() {
+    const startTime = Date.now();
     console.log('🔍 Scanning neural logs...');
     
     let recentMasterLog = readRealSessionLog();
@@ -317,6 +319,9 @@ async function run() {
 
     const mutation = getMutationDirective(recentMasterLog);
     
+    const scanTime = Date.now() - startTime;
+    const memorySize = fs.existsSync(MEMORY_FILE) ? fs.statSync(MEMORY_FILE).size : 0;
+
     const prompt = `
 *** 🧬 OPENCLAW EVOLUTION LOOP (RALPH MODE) ***
 
@@ -324,6 +329,8 @@ async function run() {
 Your goal is to reach "Code Singularity" — where your codebase is so optimized it maintains itself.
 
 **CONTEXT [Runtime State]**:
+- **Scan Duration**: ${scanTime}ms
+- **Memory Size**: ${memorySize} bytes
 - **Skills Available**:
 ${fileList}
 
