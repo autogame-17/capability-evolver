@@ -74,27 +74,43 @@ async function fetchWithRetry(url, options, retries = 3) {
             // Success: 2xx
             if (res.ok) return res;
 
-            // Client Error (4xx): Do NOT retry (except 429)
-            if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-                // Return response immediately so caller can handle the error logic (e.g. read body)
-                // or throw immediately to trigger fallback if that's the strategy.
-                // In this script, we usually want to throw so sendCard catches it.
-                throw new Error(`HTTP ${res.status} ${res.statusText} (Client Error - No Retry)`);
+            // Handle Rate Limiting (429) specifically
+            if (res.status === 429) {
+                const retryAfter = res.headers.get('retry-after');
+                const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : 1000 * Math.pow(2, i);
+                console.warn(`[Fetch] Rate Limited (429). Retrying in ${delay}ms...`);
+                await new Promise(r => setTimeout(r, delay));
+                continue; // Retry immediately after wait
             }
 
-            // Server Error (5xx) or Rate Limit (429): Retry
+            // Client Error (4xx): Do NOT retry (except 429)
+            if (res.status >= 400 && res.status < 500) {
+                const requestId = res.headers.get('x-request-id') || 'unknown';
+                // Read body for error details
+                let errBody = '';
+                try { errBody = await res.text(); } catch(e) {}
+                
+                throw new Error(`HTTP ${res.status} ${res.statusText} (ReqID: ${requestId}) - ${errBody}`);
+            }
+
+            // Server Error (5xx): Retry
             throw new Error(`HTTP ${res.status} ${res.statusText}`);
 
         } catch (e) {
             // Don't retry if we explicitly said "No Retry" (Client Error)
-            if (e.message.includes('(Client Error - No Retry)')) {
+            // or if we already handled 429 logic above
+            if (e.message.includes('(ReqID:')) {
                 throw e;
             }
 
             if (i === retries - 1) throw e;
             
-            const delay = 1000 * Math.pow(2, i); // 1s, 2s, 4s
-            console.warn(`[Fetch] Attempt ${i+1}/${retries} failed: ${e.message}. Retrying in ${delay}ms...`);
+            // Exponential Backoff with Jitter
+            const baseDelay = 1000 * Math.pow(2, i);
+            const jitter = Math.random() * 500; // 0-500ms jitter
+            const delay = baseDelay + jitter;
+            
+            console.warn(`[Fetch] Attempt ${i+1}/${retries} failed: ${e.message}. Retrying in ${Math.floor(delay)}ms...`);
             await new Promise(r => setTimeout(r, delay));
         }
     }
