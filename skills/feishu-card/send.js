@@ -133,6 +133,26 @@ async function getToken(forceRefresh = false) {
     }
 }
 
+// Helper: Execute an operation with token retry on Auth failure
+async function executeWithAuthRetry(operation) {
+    let token = await getToken();
+    try {
+        return await operation(token);
+    } catch (e) {
+        // Feishu Auth Errors: 99991663 (Tenant Token Invalid), 99991661 (Token Expired), etc.
+        const msg = e.message || '';
+        const isAuthError = msg.includes('9999166') || 
+                           (msg.toLowerCase().includes('token') && (msg.toLowerCase().includes('invalid') || msg.toLowerCase().includes('expire')));
+        
+        if (isAuthError) {
+            console.warn(`[Feishu-Card] Auth Error detected (${msg}). Refreshing token and retrying...`);
+            token = await getToken(true); // Force refresh
+            return await operation(token);
+        }
+        throw e;
+    }
+}
+
 async function uploadImage(token, filePath) {
     let fileHash;
     try {
@@ -199,8 +219,7 @@ function buildCardContent(elements, title, color) {
     return card;
 }
 
-async function sendCard(options) {
-    const token = await getToken();
+async function sendCardLogic(token, options) {
     const elements = [];
     
     if (options.imagePath) {
@@ -299,6 +318,12 @@ async function sendCard(options) {
         console.log('[Feishu-Card] Attempting fallback to plain text...');
         return await sendPlainTextFallback(token, receiveIdType, options.target, contentText, options.title, `Network Error: ${e.message}`);
     }
+}
+
+async function sendCard(options) {
+    return executeWithAuthRetry(async (token) => {
+        return await sendCardLogic(token, options);
+    });
 }
 
 async function sendPlainTextFallback(token, receiveIdType, receiveId, text, title, reason = 'Unknown') {

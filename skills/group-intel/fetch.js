@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { program } = require('commander');
-require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '../../.env') });
 
 const APP_ID = process.env.FEISHU_APP_ID;
 const APP_SECRET = process.env.FEISHU_APP_SECRET;
@@ -121,6 +121,32 @@ program
 
         } catch (e) {
             console.error('Error fetching history:', e.message);
+        }
+    });
+
+program
+    .command('members <chat_id>')
+    .description('List members of a chat')
+    .action(async (chatId) => {
+        const token = await getToken();
+        try {
+            const url = `https://open.feishu.cn/open-apis/im/v1/chats/${chatId}/members?member_id_type=open_id`;
+            const data = await fetchWithRetry(url, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            if (data.code !== 0) throw new Error(JSON.stringify(data));
+
+            const members = (data.data.items || []).map(m => ({
+                name: m.name,
+                id: m.member_id,
+                type: m.member_id_type
+            }));
+
+            console.log(JSON.stringify(members, null, 2));
+
+        } catch (e) {
+            console.error('Error fetching members:', e.message);
         }
     });
 
