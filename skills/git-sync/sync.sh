@@ -41,8 +41,9 @@ echo "Syncing with remote (Pull --rebase)..."
 if git pull --rebase origin main; then
   echo "Rebase successful."
 else
-  echo "Rebase failed/conflict. Aborting sync to prevent damage."
-  # Optional: git rebase --abort
+  echo "⚠️ Rebase failed/conflict. Aborting rebase to restore state."
+  git rebase --abort
+  echo "Sync failed: Manual intervention required to resolve conflicts."
   exit 1
 fi
 

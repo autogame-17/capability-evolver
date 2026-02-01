@@ -1,6 +1,6 @@
 {
   "name": "capability-evolver",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "A self-evolution engine for AI agents. Features automated log analysis, genetic mutation (randomized behavior shifts), and recursive self-improvement loops.",
   "main": "index.js",
   "keywords": [
