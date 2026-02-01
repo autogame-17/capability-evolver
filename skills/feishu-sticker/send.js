@@ -150,7 +150,19 @@ async function sendSticker(options) {
             cache[fileHash] = imageKey;
             // Also cache by filename to maintain legacy lookup speed if needed, but hash is preferred
             cache[fileName] = imageKey;
-            fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
+            
+            // Atomic write to prevent corruption
+            const tempPath = `${cachePath}.tmp`;
+            try {
+                fs.writeFileSync(tempPath, JSON.stringify(cache, null, 2));
+                fs.renameSync(tempPath, cachePath);
+            } catch (writeErr) {
+                console.warn('Warning: Failed to write cache atomically:', writeErr.message);
+                // Fallback to direct write if rename fails (e.g. cross-device link)
+                try {
+                     fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
+                } catch (e) {}
+            }
         }
     } else {
         console.log(`Using cached image_key (Hash: ${fileHash.substring(0, 8)})`);
