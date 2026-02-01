@@ -34,6 +34,9 @@ function detectMime(filePath) {
         const sub = buffer.subarray(4, 8).toString('ascii');
         if (sub === 'ftyp') return 'video/mp4';
 
+        // PDF (%PDF)
+        if (hex.startsWith('25504446')) return 'application/pdf';
+
         return null; // Unknown
     } catch (err) {
         // Return null on read error so main script handles it (or logging elsewhere)

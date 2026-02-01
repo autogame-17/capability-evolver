@@ -24,7 +24,8 @@ const MIME_TO_EXT = {
     'image/png': 'png',
     'image/gif': 'gif',
     'image/webp': 'webp',
-    'video/mp4': 'mp4'
+    'video/mp4': 'mp4',
+    'application/pdf': 'pdf'
 };
 
 try {
@@ -54,8 +55,15 @@ try {
         if (correctExt && currentExt !== correctExt) {
             const dir = path.dirname(filePath);
             const name = path.basename(filePath, path.extname(filePath));
-            const newPath = path.join(dir, `${name}.${correctExt}`);
+            let newPath = path.join(dir, `${name}.${correctExt}`);
             
+            // Collision avoidance: If target exists, append _1, _2, etc.
+            let counter = 1;
+            while (fs.existsSync(newPath)) {
+                newPath = path.join(dir, `${name}_${counter}.${correctExt}`);
+                counter++;
+            }
+
             try {
                 fs.renameSync(filePath, newPath);
                 
