@@ -6,24 +6,47 @@ REPO_DIR="/home/crishaocredits/.openclaw/workspace"
 
 cd "$REPO_DIR" || exit 1
 
-# Check for changes
-if [ -z "$(git status --porcelain)" ]; then
-  echo "Nothing to commit."
+# 1. Commit Local Changes
+if [ -n "$(git status --porcelain)" ]; then
+  echo "Changes detected. Committing..."
+  git add .
+  if git commit -m "$MSG"; then
+    echo "Commit successful."
+  else
+    echo "Commit failed."
+    exit 1
+  fi
+else
+  echo "No new file changes to commit."
+fi
+
+# 2. Check for Unpushed Commits
+# logic: if local main is ahead of origin/main
+# First, fetch to know the state of origin
+echo "Fetching origin..."
+git fetch origin main
+
+LOCAL=$(git rev-parse @)
+REMOTE=$(git rev-parse @{u})
+
+if [ "$LOCAL" = "$REMOTE" ]; then
+  echo "Local and Remote are in sync. Nothing to push."
   exit 0
 fi
 
-# Add everything
-git add .
-
-# Commit (pre-commit hook will run here)
-if git commit -m "$MSG"; then
-  echo "Commit successful."
+# 3. Pull & Rebase (Safety First)
+# This handles the case where we have commits (just made or previous) 
+# and remote has moved ahead.
+echo "Syncing with remote (Pull --rebase)..."
+if git pull --rebase origin main; then
+  echo "Rebase successful."
 else
-  echo "Commit failed (possibly blocked by pre-commit hook or empty)."
+  echo "Rebase failed/conflict. Aborting sync to prevent damage."
+  # Optional: git rebase --abort
   exit 1
 fi
 
-# Push with Retry
+# 4. Push with Retry
 MAX_RETRIES=3
 COUNT=0
 SUCCESS=0
