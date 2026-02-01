@@ -100,7 +100,8 @@ async function fetchWithRetry(url, options, retries = 3, timeoutMs = 15000) {
             }
 
             // Server Error (5xx): Retry
-            throw new Error(`HTTP ${res.status} ${res.statusText}`);
+            const requestId = res.headers.get('x-request-id') || 'unknown';
+            throw new Error(`HTTP ${res.status} ${res.statusText} (ReqID: ${requestId})`);
 
         } catch (e) {
             clearTimeout(timeoutId);
