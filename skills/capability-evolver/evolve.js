@@ -64,36 +64,17 @@ function readRealSessionLog() {
         
         let files = [];
         
-        // Strategy 1: Fast OS-level sort (Linux/Mac)
-        try {
-            // ls -1t: list 1 file per line, sorted by modification time (newest first)
-            // grep: filter for .jsonl
-            // head: keep top 5 to minimize processing
-            // stdio: ignore stderr so grep's exit code 1 (no matches) doesn't pollute logs, though execSync throws on non-zero
-            const output = execSync(`ls -1t "${AGENT_SESSIONS_DIR}" | grep "\\.jsonl$" | head -n 5`, { 
-                encoding: 'utf8',
-                stdio: ['ignore', 'pipe', 'ignore'] 
-            });
-            files = output.split('\n')
-                .map(l => l.trim())
-                .filter(Boolean)
-                .map(f => ({ name: f }));
-        } catch (e) {
-            // Ignore error (e.g. grep found no files, or not on Linux) and fall through to slow method
-        }
-
-        // Strategy 2: Slow Node.js fallback (if Strategy 1 failed or returned nothing but we suspect files exist)
-        if (files.length === 0) {
-            files = fs.readdirSync(AGENT_SESSIONS_DIR)
-                .filter(f => f.endsWith('.jsonl'))
-                .map(f => {
-                    try {
-                        return { name: f, time: fs.statSync(path.join(AGENT_SESSIONS_DIR, f)).mtime.getTime() };
-                    } catch (e) { return null; }
-                })
-                .filter(Boolean)
-                .sort((a, b) => b.time - a.time); // Newest first
-        }
+        // Strategy: Node.js native sort (Faster than execSync for <100 files)
+        // Note: performMaintenance() ensures file count stays low (~100 max)
+        files = fs.readdirSync(AGENT_SESSIONS_DIR)
+            .filter(f => f.endsWith('.jsonl'))
+            .map(f => {
+                try {
+                    return { name: f, time: fs.statSync(path.join(AGENT_SESSIONS_DIR, f)).mtime.getTime() };
+                } catch (e) { return null; }
+            })
+            .filter(Boolean)
+            .sort((a, b) => b.time - a.time); // Newest first
 
         if (files.length === 0) return '[NO JSONL FILES]';
 
