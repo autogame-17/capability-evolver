@@ -49,8 +49,10 @@ function recursiveScan(dir) {
         // Skip ignored directories
         if (['node_modules', '.git', 'media', 'dist', 'coverage', '.openclaw', 'memory', 'cache'].includes(file)) continue;
         
-        // Skip self and env files (secrets belong in .env)
-        if (file === 'scan.js' || file.endsWith('.env')) continue;
+        // Skip self, env files, and lock files
+        if (file === 'index.js' || file === 'scan.js' || file.endsWith('.env')) continue;
+        if (['package-lock.json', 'pnpm-lock.yaml', 'yarn.lock'].includes(file)) continue;
+        if (file.endsWith('.tmLanguage.json')) continue;
 
         try {
             const stats = fs.statSync(fullPath);
