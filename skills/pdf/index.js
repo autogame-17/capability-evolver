@@ -36,7 +36,8 @@ program
   .command('extract-table')
   .description('Extract tables from a PDF file (Heuristic)')
   .argument('<file>', 'Path to the PDF file')
-  .option('-o, --output <file>', 'Output CSV file path (default: print to stdout)')
+  .option('-o, --output <file>', 'Output file path (default: print to stdout)')
+  .option('--format <type>', 'Output format (csv, json)', 'csv')
   .option('--min-cols <number>', 'Minimum columns to consider a table', '2')
   .action(async (file, options) => {
     try {
@@ -76,21 +77,26 @@ program
       
       if (currentTable.length > 0) tables.push(currentTable);
 
-      // Convert to CSV
-      let csvOutput = '';
-      tables.forEach((table, index) => {
-        if (index > 0) csvOutput += '\n\n';
-        csvOutput += `--- Table ${index + 1} ---\n`;
-        table.forEach(row => {
-          csvOutput += row.map(c => `"${c.replace(/"/g, '""')}"`).join(',') + '\n';
-        });
-      });
+      let outputData = '';
+
+      if (options.format === 'json') {
+          outputData = JSON.stringify(tables, null, 2);
+      } else {
+          // Convert to CSV
+          tables.forEach((table, index) => {
+            if (index > 0) outputData += '\n\n';
+            outputData += `--- Table ${index + 1} ---\n`;
+            table.forEach(row => {
+              outputData += row.map(c => `"${c.replace(/"/g, '""')}"`).join(',') + '\n';
+            });
+          });
+      }
 
       if (options.output) {
-        fs.writeFileSync(options.output, csvOutput);
+        fs.writeFileSync(options.output, outputData);
         console.log(`Tables extracted to ${options.output}`);
       } else {
-        console.log(csvOutput);
+        console.log(outputData);
       }
 
     } catch (error) {
