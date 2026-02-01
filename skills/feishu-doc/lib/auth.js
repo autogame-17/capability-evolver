@@ -1,20 +1,25 @@
 const fetch = require('node-fetch');
 const fs = require('fs');
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../../../../.env') }); // Attempt to load from workspace root if running from deep nested path, or adjust relative path.
-// Adjusting path: auth.js is in lib/, so __dirname is .../skills/feishu-doc/lib
-// ../../.env would be .../skills/feishu-doc/.env
-// ../../../.env would be .../skills/.env
-// ../../../../.env would be .../.env (workspace root)
-// Actually, let's just try standard path relative to workspace root which is usually CWD.
-// Better: try multiple paths or just the one that works for feishu-card.
-// feishu-card is in skills/feishu-card/send.js. Root is ../../.env
-// feishu-doc/lib/auth.js is one level deeper. So ../../../.env
 
-try {
-  require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
-} catch (e) {
-  // ignore
+// Robust .env loading
+const possibleEnvPaths = [
+  path.resolve(process.cwd(), '.env'),
+  path.resolve(__dirname, '../../../.env'),
+  path.resolve(__dirname, '../../../../.env')
+];
+
+let envLoaded = false;
+for (const envPath of possibleEnvPaths) {
+  if (fs.existsSync(envPath)) {
+    try {
+      require('dotenv').config({ path: envPath });
+      envLoaded = true;
+      break;
+    } catch (e) {
+      // Ignore load error
+    }
+  }
 }
 
 let tokenCache = {

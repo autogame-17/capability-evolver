@@ -1,6 +1,6 @@
 {
   "name": "feishu-doc",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Fetch content from Feishu Wiki/Doc/Sheet/Bitable",
   "main": "index.js",
   "scripts": {

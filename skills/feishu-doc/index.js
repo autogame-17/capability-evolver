@@ -14,7 +14,9 @@ const EXECUTION_TIMEOUT_MS = 30000; // 30 seconds hard timeout
 async function main() {
   // Set a global watchdog timeout
   const watchdog = setTimeout(() => {
-    console.log(JSON.stringify({ error: "Execution timed out", status: "timeout" }));
+    // Write to stderr so it doesn't break JSON parsing if mixed
+    console.error("Watchdog: Execution timed out."); 
+    console.log(JSON.stringify({ error: "Execution timed out (30s limit reached)", status: "timeout" }));
     process.exit(1);
   }, EXECUTION_TIMEOUT_MS);
 
@@ -46,7 +48,11 @@ async function main() {
     }
 
     // Attempt cache read
-    const cacheKey = Buffer.from(url).toString('base64').replace(/[^a-zA-Z0-9]/g, '');
+    // Use URL-safe Base64 for file names
+    const cacheKey = Buffer.from(url).toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
     const cacheFile = path.join(CACHE_DIR, `${cacheKey}.json`);
 
     if (!noCache && fs.existsSync(cacheFile)) {

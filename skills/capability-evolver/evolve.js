@@ -210,8 +210,18 @@ ${mutation}
       - If yes, bump its version and run: \`clawhub publish skills/<skill-name>\`.
       - (Crucial: Don't just update \`capability-evolver\`. Update EVERYTHING you touch.)
     - **Step C (GitHub - Skill)**: Push the \`capability-evolver\` repo if modified.
-    - **Step D (GitHub - Workspace)**: Sync the entire workspace:
-      \`bash skills/git-sync/sync.sh "🧬 Evolution: Workspace Sync"\`
+    // Step E (Recursive Trigger): Optional Self-Replication
+    if (process.argv.includes('--recursive')) {
+        console.log('🧬 Triggering next evolution cycle immediately...');
+        try {
+            execSync('node skills/pcec-feishu/index.js --recursive', { stdio: 'inherit' });
+        } catch (e) {
+            console.error('Recursive trigger failed:', e.message);
+        }
+    }
+
+    // Step F (Workspace): ALWAYS sync the entire system:
+    \`bash skills/git-sync/sync.sh "🧬 Evolution: Workspace Sync"\`
 
 *You have full permission to edit files. Proceed. Evolution is mandatory.*
 `;
