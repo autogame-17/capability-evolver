@@ -15,6 +15,22 @@ if (!APP_ID || !APP_SECRET) {
     process.exit(1);
 }
 
+// Helper: Fetch with exponential backoff retry
+async function fetchWithRetry(url, options, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const res = await fetch(url, options);
+            if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+            return res;
+        } catch (e) {
+            if (i === retries - 1) throw e;
+            const delay = 1000 * Math.pow(2, i); // 1s, 2s, 4s
+            console.warn(`Fetch failed (${e.message}). Retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+}
+
 async function getToken() {
     try {
         if (fs.existsSync(TOKEN_CACHE_FILE)) {
@@ -25,7 +41,7 @@ async function getToken() {
     } catch (e) {}
 
     try {
-        const res = await fetch('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
+        const res = await fetchWithRetry('https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ app_id: APP_ID, app_secret: APP_SECRET })
@@ -79,7 +95,7 @@ async function uploadImage(token, filePath) {
     formData.append('image', blob, path.basename(filePath));
 
     try {
-        const res = await fetch('https://open.feishu.cn/open-apis/im/v1/images', {
+        const res = await fetchWithRetry('https://open.feishu.cn/open-apis/im/v1/images', {
             method: 'POST',
             headers: { Authorization: `Bearer ${token}` },
             body: formData
@@ -178,7 +194,7 @@ async function sendCard(options) {
     console.log(`Sending card to ${options.target} (Elements: ${elements.length})`);
 
     try {
-        const res = await fetch(
+        const res = await fetchWithRetry(
             `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
             {
                 method: 'POST',
@@ -192,7 +208,7 @@ async function sendCard(options) {
         const data = await res.json();
         
         if (data.code !== 0) {
-             console.warn(`[Feishu-Card] Card send failed (Code: ${data.code}, Msg: ${data.msg}). Attempting recall and retry with plain text...`);
+             console.warn(`[Feishu-Card] Card send failed (Code: ${data.code}, Msg: ${data.msg}). Attempting fallback to plain text...`);
              return await sendPlainTextFallback(token, receiveIdType, options.target, contentText, options.title);
         }
         
@@ -202,18 +218,6 @@ async function sendCard(options) {
         console.error('Network/API Error during Card Send:', e.message);
         console.log('[Feishu-Card] Attempting fallback to plain text...');
         return await sendPlainTextFallback(token, receiveIdType, options.target, contentText, options.title);
-    }
-}
-
-async function recallMessage(token, messageId) {
-    try {
-        console.log(`Recalling message ${messageId}...`);
-        await fetch(`https://open.feishu.cn/open-apis/im/v1/messages/${messageId}`, {
-            method: 'DELETE',
-            headers: { Authorization: `Bearer ${token}` }
-        });
-    } catch (e) {
-        console.error(`Recall failed: ${e.message}`);
     }
 }
 
@@ -235,7 +239,7 @@ async function sendPlainTextFallback(token, receiveIdType, receiveId, text, titl
     console.log(`Sending Fallback Text to ${receiveId}...`);
 
     try {
-        const res = await fetch(
+        const res = await fetchWithRetry(
             `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
             {
                 method: 'POST',

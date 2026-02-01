@@ -1,6 +1,6 @@
 {
   "name": "feishu-card",
-  "version": "1.3.0",
+  "version": "1.3.1",
   "description": "Send rich interactive cards to Feishu. v1.3.0 forces strict card rendering.",
   "main": "send.js",
   "scripts": {
