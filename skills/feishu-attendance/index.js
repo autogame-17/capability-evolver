@@ -194,26 +194,30 @@ async function main() {
       }
 
       // Prepare messages (Only send if enabled and safe)
+      // Helper to send safely without crashing the loop
+      const safeSend = async (uid, msg) => {
+          if (safeMode || !argv.notify || argv.dryRun) return;
+          try {
+              await sendMessage(uid, msg);
+          } catch (e) {
+              console.error(`[Error] Failed to send DM to ${userName} (${uid}): ${e.message}`);
+          }
+      };
+
       if (isAbsent) {
         report.absent.push(userName);
         console.log(`[Absent] ${userName}`);
-        if (!safeMode && argv.notify && !argv.dryRun) {
-            await sendMessage(userId, `[Attendance Alert] You are marked as ABSENT for ${dateStr}. Please submit a request if this is an error.`);
-        }
+        await safeSend(userId, `[Attendance Alert] You are marked as ABSENT for ${dateStr}. Please submit a request if this is an error.`);
       } else {
         if (isLate) {
           report.late.push(userName);
           console.log(`[Late] ${userName}`);
-          if (!safeMode && argv.notify && !argv.dryRun) {
-              await sendMessage(userId, `[Attendance Alert] You were LATE on ${dateStr}. Please be on time.`);
-          }
+          await safeSend(userId, `[Attendance Alert] You were LATE on ${dateStr}. Please be on time.`);
         }
         if (isEarly) {
           report.early.push(userName);
           console.log(`[Early] ${userName}`);
-          if (!safeMode && argv.notify && !argv.dryRun) {
-             await sendMessage(userId, `[Attendance Alert] You left EARLY on ${dateStr}.`);
-          }
+          await safeSend(userId, `[Attendance Alert] You left EARLY on ${dateStr}.`);
         }
       }
     }

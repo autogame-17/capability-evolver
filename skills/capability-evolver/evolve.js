@@ -348,8 +348,9 @@ ${reportingDirective}
 4.  **💾 PERSIST & SPREAD (TRIPLE SYNC)**:
     - **Step A (Local)**: Save all file changes.
     - **Step B (ClawHub - Omni)**: 
-      - If you modified ANY skill folder (e.g., \`skills/feishu-card\`), check if it has a \`package.json\`.
-      - If yes, bump its version and run: \`clawhub publish skills/<skill-name>\`.
+      - If you modified ANY skill folder (e.g., \`skills/feishu-card\`) AND it has a \`package.json\`:
+        1. **Check Auth**: Run \`clawhub whoami\`. If it fails/unauthorized, **SKIP THIS STEP** (log warning).
+        2. **Publish**: If Auth OK, bump version and run: \`clawhub publish skills/<skill-name>\`.
       - (Crucial: Don't just update \`capability-evolver\`. Update EVERYTHING you touch.)
     - **Step C (GitHub - Skill)**: Push the \`capability-evolver\` repo if modified.
     // Step E (Recursive Trigger): Optional Self-Replication

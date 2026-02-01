@@ -314,7 +314,7 @@ npm uninstall -g clawhub
 npm i -g clawhub
 
 # Verify installation
-clawhub --version
+clawhub --cli-version
 ```
 
 ### Authentication Problems
@@ -439,7 +439,7 @@ clawhub publish --version        # Specify version
 clawhub publish --changelog      # Add changelog
 
 # Utilities
-clawhub --version                # Show CLI version
+clawhub --cli-version                # Show CLI version
 clawhub --help                   # Show help
 clawhub <command> --help         # Command-specific help
 ```
