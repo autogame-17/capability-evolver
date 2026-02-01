@@ -1,6 +1,6 @@
 {
   "name": "feishu-sticker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Send images as native Feishu stickers. Features auto-upload, caching, and GIF-to-WebP conversion.",
   "main": "send.js",
   "bin": {

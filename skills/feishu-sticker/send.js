@@ -247,11 +247,37 @@ async function sendSticker(options) {
 }
 
 program
-  .requiredOption('-t, --target <open_id>', 'Target User Open ID')
+  .option('-t, --target <open_id>', 'Target User Open ID')
   .option('-f, --file <path>', 'Specific image file path (optional)')
   .option('-q, --query <text>', 'Search query (e.g., "angry cat", "happy")')
   .option('-e, --emotion <emotion>', 'Filter by emotion (e.g., "happy", "sad")')
   .parse(process.argv);
+
+function getAutoTarget() {
+    // 1. Env Var (Highest Priority)
+    if (process.env.FEISHU_TARGET_ID) return process.env.FEISHU_TARGET_ID;
+
+    // 2. Shared Context (Active Session)
+    try {
+        const contextPath = path.resolve(__dirname, '../../memory/context.json');
+        if (fs.existsSync(contextPath)) {
+            const context = JSON.parse(fs.readFileSync(contextPath, 'utf8'));
+            if (context.last_target_id) return context.last_target_id;
+        }
+    } catch (e) {}
+
+    // 3. Last Menu Interaction (Fallback)
+    try {
+        const menuPath = path.resolve(__dirname, '../../memory/menu_events.json');
+        if (fs.existsSync(menuPath)) {
+            const events = JSON.parse(fs.readFileSync(menuPath, 'utf8'));
+            if (events.length > 0) return events[events.length - 1].user_id;
+        }
+    } catch (e) {}
+
+    // 4. Default to Master
+    return 'ou_cdc63fe05e88c580aedead04d851fc04'; 
+}
 
 async function findSticker(options) {
     if (!options.query && !options.emotion) return null;
@@ -278,6 +304,12 @@ async function findSticker(options) {
 
 (async () => {
     const opts = program.opts();
+
+    // Auto-detect target if missing
+    if (!opts.target) {
+        opts.target = getAutoTarget();
+        console.log(`Auto-detected target: ${opts.target}`);
+    }
     
     // If query/emotion is provided, try to find a matching sticker
     if (opts.query || opts.emotion) {
