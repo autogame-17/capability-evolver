@@ -15,10 +15,8 @@ try {
   // ignore
 }
 
-let tokenCache = {
-  token: null,
-  expireTime: 0
-};
+// SHARED TOKEN CACHE (Unified with feishu-card)
+const TOKEN_CACHE_FILE = path.resolve(__dirname, '../../../memory/feishu_token.json');
 
 function loadConfig() {
   const configPath = path.join(__dirname, '../config.json');
@@ -38,9 +36,18 @@ function loadConfig() {
 }
 
 async function getTenantAccessToken() {
-  const now = Date.now() / 1000;
-  if (tokenCache.token && tokenCache.expireTime > now) {
-    return tokenCache.token;
+  const now = Math.floor(Date.now() / 1000);
+
+  // 1. Try Memory Cache (File)
+  if (fs.existsSync(TOKEN_CACHE_FILE)) {
+    try {
+      const cached = JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, 'utf8'));
+      if (cached.token && cached.expire > now + 60) {
+        return cached.token;
+      }
+    } catch (e) {
+      // Ignore cache errors, fetch new
+    }
   }
 
   const config = loadConfig();
@@ -63,10 +70,22 @@ async function getTenantAccessToken() {
     throw new Error(`Failed to get tenant_access_token: ${data.msg}`);
   }
 
-  tokenCache.token = data.tenant_access_token;
-  tokenCache.expireTime = now + data.expire - 60; // Refresh 1 minute early
+  // 2. Update Memory Cache (File)
+  try {
+    const cacheData = {
+      token: data.tenant_access_token,
+      expire: now + data.expire
+    };
+    // Ensure directory exists
+    const cacheDir = path.dirname(TOKEN_CACHE_FILE);
+    if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+    
+    fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(cacheData, null, 2));
+  } catch (e) {
+    console.error("Failed to write token cache:", e.message);
+  }
 
-  return tokenCache.token;
+  return data.tenant_access_token;
 }
 
 module.exports = {

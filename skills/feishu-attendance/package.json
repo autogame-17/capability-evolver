@@ -1,6 +1,6 @@
 {
   "name": "feishu-attendance",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Feishu Attendance Monitoring Skill",
   "main": "index.js",
   "scripts": {
