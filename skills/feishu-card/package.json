@@ -1,6 +1,6 @@
 {
   "name": "feishu-card",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Send rich interactive cards to Feishu. v1.4.1 adds atomic file writes for stability.",
   "main": "send.js",
   "scripts": {

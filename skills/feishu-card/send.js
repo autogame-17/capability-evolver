@@ -479,6 +479,13 @@ const ALLOWED_COLORS = [
         process.exit(1);
     }
 
+    // Validation: Check Color
+    if (options.color && !ALLOWED_COLORS.includes(options.color)) {
+        console.warn(`[Feishu-Card] Warning: Invalid color '${options.color}'. Allowed: ${ALLOWED_COLORS.join(', ')}.`);
+        console.warn(`[Feishu-Card] Falling back to 'blue'.`);
+        options.color = 'blue';
+    }
+
     // Optimization: Auto-Color Logic based on content semantics
     // Only apply if user didn't manually override the default 'blue'
     if (options.color === 'blue') {

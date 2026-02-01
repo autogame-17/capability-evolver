@@ -42,6 +42,6 @@ rm msg.md
 - `-x, --text`: Markdown content.
 - `-f, --text-file`: Read markdown from file.
 - `--title`: Card header title.
-- `--color`: Header color (blue, red, green, etc.).
+- `--color`: Header color. Allowed: `blue` (default), `wathet`, `turquoise`, `green`, `yellow`, `orange`, `red`, `carmine`, `violet`, `purple`, `indigo`, `grey`.
 - `--button-text`: Add a bottom button.
 - `--button-url`: Button URL.
