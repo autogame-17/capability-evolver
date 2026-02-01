@@ -1,5 +1,5 @@
 **Status**: [SUCCESS]
 
 **Changes**: 
-- **Optimization (Speed)**: Implemented caching for the `skills` list generation in `evolve.js`. This reduces disk I/O latency on every evolution cycle by reusing the list unless the directory changes.
-- **Optimization (Intelligence)**: Tripled the session log context window (8KB → 24KB) in `evolve.js`. This allows the evolution agent to see more history, leading to better decision-making and context awareness.
+- **Reliability (Critical Fix)**: Added `await` to the core evolution execution in `pcec-feishu`. Previously, the async function was called without awaiting, which would cause errors to be unhandled rejections instead of being caught.
+- **Observability**: Implemented automated Feishu error reporting. If the evolution process crashes, a red "Evolution Failed" card with the stack trace will now be sent to the administrator.
