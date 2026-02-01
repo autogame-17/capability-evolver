@@ -1,0 +1,9 @@
+{
+  "name": "youtube-video-downloader",
+  "version": "1.0.0",
+  "description": "Download YouTube videos using ytdl-core",
+  "main": "index.js",
+  "dependencies": {
+    "ytdl-core": "^4.11.5"
+  }
+}
