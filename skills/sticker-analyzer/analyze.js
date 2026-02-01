@@ -6,14 +6,19 @@ const { spawnSync } = require('child_process');
 
 // Optimization: Cleaner FFmpeg resolution
 let ffmpegPath;
-try {
-    ffmpegPath = require('ffmpeg-static');
-} catch (e) {
+const localStaticPath = path.resolve(__dirname, '../../bin/ffmpeg');
+if (fs.existsSync(localStaticPath)) {
+    ffmpegPath = localStaticPath;
+} else {
     try {
-        // Fallback for monorepo/nested structures
-        ffmpegPath = require(require.resolve('ffmpeg-static', { paths: [process.cwd(), __dirname] }));
-    } catch (e2) {
-        // Silent fail, will warn only if GIF encountered
+        ffmpegPath = require('ffmpeg-static');
+    } catch (e) {
+        try {
+            // Fallback for monorepo/nested structures
+            ffmpegPath = require(require.resolve('ffmpeg-static', { paths: [process.cwd(), __dirname] }));
+        } catch (e2) {
+            // Silent fail, will warn only if GIF encountered
+        }
     }
 }
 

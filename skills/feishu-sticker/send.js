@@ -7,15 +7,20 @@ const { program } = require('commander');
 const FormData = require('form-data');
 // Try to resolve ffmpeg-static from workspace root
 let ffmpegPath;
-try {
-    // Robust require: search node_modules
-    ffmpegPath = require.resolve('ffmpeg-static');
-    ffmpegPath = require(ffmpegPath);
-} catch (e) {
+const localStaticPath = path.resolve(__dirname, '../../bin/ffmpeg');
+if (fs.existsSync(localStaticPath)) {
+    ffmpegPath = localStaticPath;
+} else {
     try {
-        ffmpegPath = require(path.resolve(__dirname, '../../node_modules/ffmpeg-static'));
-    } catch (e2) {
-        console.warn('Warning: ffmpeg-static not found. GIF conversion will fail.');
+        // Robust require: search node_modules
+        ffmpegPath = require.resolve('ffmpeg-static');
+        ffmpegPath = require(ffmpegPath);
+    } catch (e) {
+        try {
+            ffmpegPath = require(path.resolve(__dirname, '../../node_modules/ffmpeg-static'));
+        } catch (e2) {
+            console.warn('Warning: ffmpeg-static not found. GIF conversion will fail.');
+        }
     }
 }
 
