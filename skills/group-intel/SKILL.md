@@ -27,6 +27,7 @@ Manually trigger a scan and report.
 ## Implementation
 - `report.js`: Generates a persona-based analysis prompt.
 - `fetch.js`: CLI tool to list chats and fetch message history from Feishu API.
+- `gen_report.js`: Converts JSON history from `fetch.js` into a readable Markdown report.
 
 ## CLI Usage
 ```bash
@@ -34,5 +35,8 @@ Manually trigger a scan and report.
 npm run fetch -- list
 
 # Fetch history for a chat
-npm run fetch -- history <chat_id> --limit 50
+npm run fetch -- history <chat_id> --limit 50 > history.json
+
+# Generate Markdown Report
+npm run gen-report -- --input history.json --output report.md
 ```

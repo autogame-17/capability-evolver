@@ -1,11 +1,12 @@
 {
   "name": "group-intel",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "description": "Periodically scans group chats, summarizes conversations, and reports intelligence.",
   "main": "report.js",
   "scripts": {
     "report": "node report.js",
-    "fetch": "node fetch.js"
+    "fetch": "node fetch.js",
+    "gen-report": "node gen_report.js"
   },
   "dependencies": {
     "commander": "^13.1.0",
