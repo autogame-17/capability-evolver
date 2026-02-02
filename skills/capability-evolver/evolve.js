@@ -198,7 +198,10 @@ function checkSystemHealth() {
 }
 
 function getMutationDirective(logContent) {
-    // Adaptive Logic: Analyze recent logs for stability
+    // 🧬 FORCE MUTATION MODE (Override by Master Directive: 2026-02-02)
+    // Stability scans are disallowed. Every cycle must evolve.
+    
+    // Adaptive Logic: Still check errors to decide TYPE of mutation
     // Optimization: Regex now catches more error variants (Error:, Exception:, FAIL)
     const errorMatches = logContent.match(/\[ERROR|Error:|Exception:|FAIL|Failed|"isError":true/gi) || [];
     const errorCount = errorMatches.length;
@@ -209,34 +212,25 @@ function getMutationDirective(logContent) {
     // If unstable, force stability unless roll is critical (95+)
     if (isUnstable && roll < 95) {
          return `
-**🧬 ADAPTIVE STABILITY MODE (Detected ${errorCount} recent errors)**
-The system detected instability in recent sessions. 
+**🧬 ADAPTIVE REPAIR MODE (Detected ${errorCount} recent errors)**
+The system detected instability. You MUST perform a **Repair Mutation**.
 **MANDATORY DIRECTIVE**:
 - **Fix Bugs**: Locate the source of the recent errors and patch them.
 - **Harden Code**: Add try/catch blocks or input validation.
-- **Do NOT** add new features until stability is restored.
+- **Do NOT** just scan. You must write code to fix the problem.
 `;
     }
 
-    let threshold = 60; // Slightly more frequent mutations, but strictly useful ones
-    if (errorCount === 0) threshold = 40; // Encourage evolution when stable
-
-    if (roll > threshold) {
-        return `
-**🧬 GENETIC MUTATION ACTIVATED (Roll: ${roll})**
-System appears stable (${errorCount} recent errors). Evolution is permitted.
-Your goal is **FUNCTIONAL UTILITY**. Do NOT create entertainment or cosmetic quirks.
+    // Default: Aggressive Evolution
+    return `
+**🧬 FORCED MUTATION MODE (Master Directive)**
+Stability scans are BANNED. You MUST evolve the system.
 **Directives:**
 - **Optimize**: Find a script that is slow or verbose and streamline it.
 - **Harden**: Add error handling to a fragile function.
 - **Automate**: Identify a manual task the user does often and script it.
 - **Analyze**: Dig deeper into logs to find hidden inefficiencies.
-*Goal: Evolution means survival of the fittest code, not the funniest.*
-`;
-    }
-    return `
-**🧬 STABILITY MODE (Roll: ${roll})**
-Focus on reliability, bug fixing, and documentation. Consolidate gains.
+*Goal: Code Singularity. Every cycle adds value.*
 `;
 }
 
