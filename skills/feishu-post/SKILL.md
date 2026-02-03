@@ -1,21 +1,15 @@
-# Feishu Post Skill
+# Feishu Post (RichText) Skill
 
-Send rich text messages (Post/富文本) to Feishu/Lark. 
-Designed for messages containing code blocks or structured text that Feishu Cards handle poorly.
+Send Rich Text (Post) messages to Feishu.
+This format is distinct from Cards. It supports native rich text elements but is less flexible in layout than cards. It is better for long-form text mixed with images/links.
 
 ## Usage
 
 ```bash
-node skills/feishu-post/send.js --target "ou_..." --text "Markdown content" --title "Optional Title"
+node skills/feishu-post/send.js --target "ou_..." --text-file "temp/msg.md" --title "Optional Title"
 ```
 
-## Features
-- **Markdown Parsing:** Automatically converts Markdown code blocks (\`\`\`) to Feishu native code blocks.
-- **Rich Text:** Supports basic text paragraphs.
-- **Auto-Target:** Infers target from environment or context if omitted.
-
 ## Options
-- `-t, --target <id>`: Target Open ID (`ou_`) or Chat ID (`oc_`).
-- `-x, --text <text>`: Message content (Markdown).
-- `-f, --text-file <path>`: Read content from file.
-- `--title <title>`: Post title.
+- `-t, --target <id>`: Target ID (user/chat).
+- `-f, --text-file <path>`: Markdown content file.
+- `--title <text>`: Title of the post.

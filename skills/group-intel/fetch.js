@@ -175,8 +175,32 @@ program
                         content: content
                     };
                 });
+                
+                // --- UPDATE START: Check for new messages ---
+                const lastHistoryFile = path.resolve(__dirname, `history_last_check_${chatId}.json`);
+                let lastCheckTime = 0;
+                if (fs.existsSync(lastHistoryFile)) {
+                    try {
+                        const lastData = JSON.parse(fs.readFileSync(lastHistoryFile, 'utf8'));
+                        lastCheckTime = new Date(lastData.lastTime).getTime();
+                    } catch(e) {}
+                }
 
-                console.log(JSON.stringify(messages.reverse(), null, 2));
+                // Filter for messages NEWER than lastCheckTime
+                const newMessages = messages.filter(m => new Date(m.time).getTime() > lastCheckTime);
+
+                if (newMessages.length === 0) {
+                    console.log("NO_NEW_MESSAGES"); // Special flag for the agent
+                } else {
+                    console.log(JSON.stringify(newMessages.reverse(), null, 2));
+                    
+                    // Update last check time to the newest message
+                    const newestMsg = newMessages[newMessages.length - 1];
+                    try {
+                        fs.writeFileSync(lastHistoryFile, JSON.stringify({ lastTime: newestMsg.time }));
+                    } catch(e) {}
+                }
+                 // --- UPDATE END ---
             });
         } catch (e) {
             console.error('Error fetching history:', e.message);

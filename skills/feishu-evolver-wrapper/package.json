@@ -4,6 +4,6 @@
   "description": "Feishu-specific wrapper for capability-evolver",
   "main": "index.js",
   "dependencies": {
-    "capability-evolver": "file:../capability-evolver"
+    "evolver": "file:../evolver"
   }
 }

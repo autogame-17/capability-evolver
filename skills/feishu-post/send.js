@@ -4,53 +4,35 @@ const { program } = require('commander');
 const path = require('path');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
 
-// Credentials
 const APP_ID = process.env.FEISHU_APP_ID;
 const APP_SECRET = process.env.FEISHU_APP_SECRET;
 const TOKEN_CACHE_FILE = path.resolve(__dirname, '../../memory/feishu_token.json');
-
-// Helper: Atomic JSON Write
-function writeJsonAtomic(filePath, data) {
-    try {
-        const tempPath = `${filePath}.tmp.${Date.now()}`;
-        fs.writeFileSync(tempPath, JSON.stringify(data, null, 2));
-        fs.renameSync(tempPath, filePath);
-    } catch (e) {}
-}
 
 if (!APP_ID || !APP_SECRET) {
     console.error('Error: FEISHU_APP_ID or FEISHU_APP_SECRET not set.');
     process.exit(1);
 }
 
-// Helper: Fetch with retry
-async function fetchWithRetry(url, options, retries = 3, timeoutMs = 15000) {
+async function fetchWithRetry(url, options, retries = 3) {
     for (let i = 0; i < retries; i++) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
         try {
-            const res = await fetch(url, { ...options, signal: controller.signal });
-            clearTimeout(timeoutId);
-            if (res.ok) return res;
-            if (res.status === 429) {
-                await new Promise(r => setTimeout(r, 2000));
-                continue;
-            }
-            if (res.status >= 400 && res.status < 500) throw new Error(`HTTP ${res.status}`);
-            throw new Error(`HTTP ${res.status}`);
+            const res = await fetch(url, options);
+            if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+            return res;
         } catch (e) {
-            clearTimeout(timeoutId);
             if (i === retries - 1) throw e;
-            await new Promise(r => setTimeout(r, 1000 * Math.pow(2, i)));
+            const delay = 1000 * Math.pow(2, i);
+            await new Promise(r => setTimeout(r, delay));
         }
     }
 }
 
-async function getToken(forceRefresh = false) {
+async function getToken() {
     try {
-        if (!forceRefresh && fs.existsSync(TOKEN_CACHE_FILE)) {
+        if (fs.existsSync(TOKEN_CACHE_FILE)) {
             const cached = JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, 'utf8'));
-            if (cached.expire > Math.floor(Date.now() / 1000) + 300) return cached.token;
+            const now = Math.floor(Date.now() / 1000);
+            if (cached.expire > now + 60) return cached.token;
         }
     } catch (e) {}
 
@@ -61,225 +43,240 @@ async function getToken(forceRefresh = false) {
             body: JSON.stringify({ app_id: APP_ID, app_secret: APP_SECRET })
         });
         const data = await res.json();
-        if (!data.tenant_access_token) throw new Error('No token');
-        
-        writeJsonAtomic(TOKEN_CACHE_FILE, {
-            token: data.tenant_access_token,
-            expire: Math.floor(Date.now() / 1000) + data.expire 
-        });
+        if (!data.tenant_access_token) throw new Error(`No token returned: ${JSON.stringify(data)}`);
+
+        try {
+            const cacheData = {
+                token: data.tenant_access_token,
+                expire: Math.floor(Date.now() / 1000) + data.expire 
+            };
+            fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(cacheData, null, 2));
+        } catch (e) {
+            console.error('Failed to cache token:', e.message);
+        }
+
         return data.tenant_access_token;
     } catch (e) {
+        console.error('Failed to get token:', e.message);
         process.exit(1);
     }
 }
 
-// Helper: Parse Inline Markdown (Bold, Italic, Strike, Link, Code)
-// Returns array of element objects for a single line
-function parseInlineMarkdown(text) {
-    const elements = [];
-    let currentText = '';
-    let i = 0;
+function parseMarkdownToRichText(md) {
+    // Basic Markdown Parser for Feishu Post (Richtext)
+    // Supports:
+    // - Headers (#) -> title (handled separately or just bold)
+    // - Bold (**text**)
+    // - Italic (*text*)
+    // - Code blocks (```lang ... ```)
+    // - Inline code (`text`)
+    // - Links ([text](url))
+    // - Lists (- item) (Approximated)
+    // - Images (![alt](key))
     
-    // Simple state machine or regex approach?
-    // Regex is easier for simple nesting.
-    // Order: Code(`) -> Bold(**) -> Italic(*) -> Strike(~~) -> Link([])
-    // We process sequentially.
+    // Feishu Post Structure: [[{ tag: "text", text: "..." }, ...], ...] (Array of paragraphs)
     
-    // Actually, splitting by regex is safer.
-    // Regex for tokens: 
-    // 1. `code`
-    // 2. **bold**
-    // 3. *italic*
-    // 4. ~~strike~~
-    // 5. [text](url)
-    // 6. <at user_id="xxx">name</at> (Feishu specific)
-    
-    const regex = /(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*|~~[^~]+~~|\[[^\]]+\]\([^)]+\)|<at.*?>.*?<\/at>)/g;
-    const parts = text.split(regex);
-    
-    parts.forEach(part => {
-        if (!part) return;
-        
-        // Inline Code -> Italic (User Preference)
-        if (part.startsWith('`') && part.endsWith('`')) {
-            elements.push({ tag: 'text', text: part.slice(1, -1), style: ['italic'] });
-        }
-        // Bold
-        else if (part.startsWith('**') && part.endsWith('**')) {
-            elements.push({ tag: 'text', text: part.slice(2, -2), style: ['bold'] });
-        }
-        // Italic
-        else if (part.startsWith('*') && part.endsWith('*')) {
-            elements.push({ tag: 'text', text: part.slice(1, -1), style: ['italic'] });
-        }
-        // Strike
-        else if (part.startsWith('~~') && part.endsWith('~~')) {
-            elements.push({ tag: 'text', text: part.slice(2, -2), style: ['lineThrough'] });
-        }
-        // Link
-        else if (part.startsWith('[') && part.includes('](') && part.endsWith(')')) {
-            const match = part.match(/\[(.*?)\]\((.*?)\)/);
-            if (match) {
-                elements.push({ tag: 'a', text: match[1], href: match[2] });
-            } else {
-                elements.push({ tag: 'text', text: part });
-            }
-        }
-        // At (Feishu) - pass through or parse? 
-        // For now treat as text, Feishu might auto-parse plain text @ mentions if at_user=true?
-        // Post structure supports <at> tag: { tag: 'at', user_id: '...' }
-        else if (part.startsWith('<at')) {
-             const match = part.match(/user_id="(.*?)".*?>(.*?)<\/at>/);
-             if (match) {
-                 elements.push({ tag: 'at', user_id: match[1] });
-             } else {
-                 elements.push({ tag: 'text', text: part });
-             }
-        }
-        // Plain Text
-        else {
-            elements.push({ tag: 'text', text: part });
-        }
-    });
-    
-    return elements;
-}
-
-// Markdown to Rich Text Parser
-function parseMarkdownToRichText(text) {
-    const lines = text.split(/\r?\n/);
+    const lines = md.split('\n');
     const content = [];
     let inCodeBlock = false;
-    let codeLanguage = '';
-    let codeContent = '';
+    let codeBlockBuffer = [];
 
     for (const line of lines) {
         if (line.trim().startsWith('```')) {
             if (inCodeBlock) {
-                content.push([{ tag: 'code_block', language: codeLanguage || 'text', text: codeContent.trimEnd() }]);
+                // End code block
                 inCodeBlock = false;
-                codeContent = '';
+                // Add code block element (Feishu doesn't have native code block in Post? Wait, it does)
+                // Post schema: text, a, at, img, media
+                // It does NOT have 'code_block' in standard post. Only in Doc or Card.
+                // Fallback: Use text with monospaced style if possible, or just raw text.
+                // Actually, rich text message (post) supports limited tags.
+                // Best fallback for code block in Post: just text.
+                content.push([{ tag: 'text', text: codeBlockBuffer.join('\n') }]);
+                codeBlockBuffer = [];
             } else {
                 inCodeBlock = true;
-                codeLanguage = line.trim().substring(3).trim().toUpperCase(); // Feishu likes uppercase (JSON, JS)
+                // Check if language specified
+                // const lang = line.trim().substring(3);
             }
             continue;
         }
+
         if (inCodeBlock) {
-            codeContent += line + '\n';
+            codeBlockBuffer.push(line);
             continue;
         }
-        
-        // Use inline parser for non-code lines
-        // Preserve empty lines for spacing
-        if (line === '') {
-             content.push([{ tag: 'text', text: '' }]);
-             continue;
+
+        // Process line for inline formatting
+        const elements = processInlineFormatting(line);
+        if (elements.length > 0) {
+            content.push(elements);
+        } else {
+            // Empty line -> empty text to create spacing
+            content.push([{ tag: 'text', text: '' }]);
         }
-        
-        content.push(parseInlineMarkdown(line));
     }
     
-    if (inCodeBlock && codeContent) {
-        content.push([{ tag: 'code_block', language: codeLanguage || 'text', text: codeContent.trimEnd() }]);
-    }
     return content;
 }
 
-async function sendPost(token, target, text, title) {
-    const postContent = parseMarkdownToRichText(text);
-    
-    let receiveIdType = 'open_id';
-    if (target.startsWith('oc_')) receiveIdType = 'chat_id';
-    else if (target.startsWith('ou_')) receiveIdType = 'open_id';
-    else if (target.includes('@')) receiveIdType = 'email';
+function processInlineFormatting(line) {
+    // 1. Header parsing (Convert to bold text)
+    let text = line;
+    let styles = [];
+    if (text.startsWith('#')) {
+        text = text.replace(/^#+\s*/, '');
+        styles.push('bold');
+    }
 
-    const contentPayload = {
+    // 2. Tokenize for Bold, Italic, Link
+    // Simple state machine or multiple regex passes?
+    // Regex split approach is safer for simple nesting.
+    
+    // Pattern: Links [text](url) OR Bold **text** OR Italic *text*
+    // We split by a regex that captures all delimiters
+    const regex = /(\*\*.+?\*\*)|(\*.+?\*)|(\[.+?\]\(.+?\))/g;
+    
+    const parts = text.split(regex).filter(p => p !== undefined && p !== '');
+    const elements = [];
+
+    // If split failed to separate (no matches), parts is just [text]
+    // Wait, split with capturing groups includes the captures. 
+    // Example: "A **B** C".split(/(\*\*.*?\*\*)/) -> ["A ", "**B**", " C"]
+    
+    // We need to re-verify what the captures are.
+    // If we use multiple groups, they all appear.
+    // Let's iterate manually to identify type.
+
+    let currentIndex = 0;
+    // We need to handle the original string to preserve order.
+    // Let's use matchAll or exec in a loop.
+    
+    const tokenRegex = /(\*\*(?<bold>.+?)\*\*)|(\*(?<italic>.+?)\*)|(\[(?<linkText>.+?)\]\((?<linkUrl>.+?)\))/g;
+    
+    let match;
+    while ((match = tokenRegex.exec(text)) !== null) {
+        // Add preceding text
+        if (match.index > currentIndex) {
+            elements.push({ 
+                tag: 'text', 
+                text: text.substring(currentIndex, match.index),
+                style: [...styles]
+            });
+        }
+
+        if (match.groups.bold) {
+            elements.push({
+                tag: 'text',
+                text: match.groups.bold,
+                style: [...styles, 'bold']
+            });
+        } else if (match.groups.italic) {
+            elements.push({
+                tag: 'text',
+                text: match.groups.italic,
+                style: [...styles, 'italic']
+            });
+        } else if (match.groups.linkText) {
+            elements.push({
+                tag: 'a',
+                text: match.groups.linkText,
+                href: match.groups.linkUrl,
+                style: [...styles]
+            });
+        }
+
+        currentIndex = tokenRegex.lastIndex;
+    }
+
+    // Add remaining text
+    if (currentIndex < text.length) {
+        elements.push({ 
+            tag: 'text', 
+            text: text.substring(currentIndex),
+            style: [...styles]
+        });
+    }
+
+    return elements;
+}
+
+async function sendPost(options) {
+    const token = await getToken();
+    
+    let contentText = '';
+    if (options.textFile) {
+        try { contentText = fs.readFileSync(options.textFile, 'utf8'); } catch (e) {
+            console.error(`Failed to read file: ${options.textFile}`);
+            process.exit(1);
+        }
+    } else if (options.text) {
+        contentText = options.text.replace(/\\n/g, '\n');
+    }
+
+    if (!contentText) {
+        console.error('No content to send.');
+        process.exit(1);
+    }
+
+    // Convert MD to Feishu Post structure
+    const postContent = parseMarkdownToRichText(contentText);
+    
+    const postObj = {
         zh_cn: {
+            title: options.title || '',
             content: postContent
         }
     };
-    if (title) {
-        contentPayload.zh_cn.title = title;
-    }
+
+    let receiveIdType = 'open_id';
+    if (options.target.startsWith('oc_')) receiveIdType = 'chat_id';
+    else if (options.target.startsWith('ou_')) receiveIdType = 'open_id';
+    else if (options.target.includes('@')) receiveIdType = 'email';
 
     const messageBody = {
-        receive_id: target,
+        receive_id: options.target,
         msg_type: 'post',
-        content: JSON.stringify(contentPayload)
+        content: JSON.stringify(postObj)
     };
 
-    console.log(`Sending Post to ${target}...`);
-    const res = await fetchWithRetry(
-        `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
-        {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(messageBody)
+    console.log(`Sending Post (RichText) to ${options.target}...`);
+
+    try {
+        const res = await fetchWithRetry(
+            `https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=${receiveIdType}`,
+            {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(messageBody)
+            }
+        );
+        const data = await res.json();
+        
+        if (data.code !== 0) {
+             throw new Error(`API Error ${data.code}: ${data.msg}`);
         }
-    );
-    const data = await res.json();
-    console.log(JSON.stringify(data));
+        
+        console.log('Success:', JSON.stringify(data.data, null, 2));
+
+    } catch (e) {
+        console.error('Post Send Failed:', e.message);
+        process.exit(1);
+    }
 }
 
-// CLI Setup
 program
-  .option('-t, --target <id>', 'Target ID')
-  .option('-x, --text <text>', 'Text content')
-  .option('-f, --text-file <path>', 'Text file path')
-  .option('--title <title>', 'Title');
+  .requiredOption('-t, --target <id>', 'Target ID')
+  .option('-x, --text <markdown>', 'Post content')
+  .option('-f, --text-file <path>', 'Post content file')
+  .option('--title <text>', 'Post title');
 
 program.parse(process.argv);
 const options = program.opts();
 
-// Auto-Target Logic (Simplified)
-function getAutoTarget() {
-    if (options.target) return options.target;
-    if (process.env.FEISHU_TARGET_ID) return process.env.FEISHU_TARGET_ID;
-    try {
-        if (fs.existsSync('../../memory/context.json')) {
-            const ctx = JSON.parse(fs.readFileSync('../../memory/context.json'));
-            return ctx.last_active_chat || ctx.last_active_user;
-        }
-    } catch(e) {}
-    try {
-        const userMd = fs.readFileSync(path.resolve(__dirname, '../../USER.md'), 'utf8');
-        const match = userMd.match(/(?:Master|Owner).*?Feishu ID:.*?`(ou_[a-z0-9]+)`/s);
-        if (match) return match[1];
-    } catch(e) {}
-    return null;
-}
-
 (async () => {
-    let text = options.text;
-    if (options.textFile) text = fs.readFileSync(options.textFile, 'utf8');
-    
-    // Support parsing JSON stringified text (for newline preservation from shell)
-    if (text && text.startsWith('"') && text.endsWith('"')) {
-        try {
-            text = JSON.parse(text);
-        } catch(e) {}
-    } else if (text && text.includes('\\n')) {
-        // Fallback for simple escaped newlines if not full JSON
-        text = text.replace(/\\n/g, '\n'); 
-    }
-
-    if (!text && !process.stdin.isTTY) {
-        text = '';
-        for await (const chunk of process.stdin) text += chunk;
-    }
-
-    if (!text) {
-        console.error('No text provided');
-        process.exit(1);
-    }
-
-    const target = getAutoTarget();
-    if (!target) {
-        console.error('No target found');
-        process.exit(1);
-    }
-
-    const token = await getToken();
-    await sendPost(token, target, text, options.title);
+    sendPost(options);
 })();
