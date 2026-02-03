@@ -13,9 +13,9 @@ const AGENT_SESSIONS_DIR = path.join(os.homedir(), `.openclaw/agents/${AGENT_NAM
 const TODAY_LOG = path.join(MEMORY_DIR, new Date().toISOString().split('T')[0] + '.md');
 
 // Memory Paths
-const KNOWLEDGE_DIR = path.join(MEMORY_DIR, 'knowledge_base'); // Replaces .learnings
-const ACTIVE_MUTATIONS_FILE = path.join(KNOWLEDGE_DIR, 'active_mutations.md');
-const LESSONS_LEARNED_FILE = path.join(KNOWLEDGE_DIR, 'lessons_learned.md');
+const KNOWLEDGE_DIR = path.join(MEMORY_DIR, 'KNOWLEDGE_BASE'); // Replaces .learnings
+const ACTIVE_MUTATIONS_FILE = path.join(KNOWLEDGE_DIR, 'ACTIVE_MUTATIONS.md');
+const LESSONS_LEARNED_FILE = path.join(KNOWLEDGE_DIR, 'LESSONS_LEARNED.md');
 
 // Ensure directory exists
 if (!fs.existsSync(KNOWLEDGE_DIR)) fs.mkdirSync(KNOWLEDGE_DIR, { recursive: true });
@@ -97,8 +97,8 @@ async function run() {
 - Scan Time: ${Date.now() - startTime}ms
 
 **KNOWLEDGE BASE (New Architecture)**:
-- **Active Mutations**: \`memory/knowledge_base/active_mutations.md\` (Your current experiments)
-- **Lessons Learned**: \`memory/knowledge_base/lessons_learned.md\` (Your crystallized wisdom)
+- **Active Mutations**: \`memory/KNOWLEDGE_BASE/ACTIVE_MUTATIONS.md\` (Your current experiments)
+- **Lessons Learned**: \`memory/KNOWLEDGE_BASE/LESSONS_LEARNED.md\` (Your crystallized wisdom)
 
 **RECENT TRANSCRIPT (Brain Dump)**:
 \`\`\`
@@ -116,7 +116,7 @@ ${transcript.slice(-5000)}
     - **Optimize**: If code is slow/verbose -> Refactor it.
     - **Crystallize (Knowledge Ascension)**: 
       - If you learned a new rule (e.g., "Always use WebP"), **DO NOT** just remember it.
-      - **WRITE IT DOWN**: Append it to \`memory/knowledge_base/lessons_learned.md\`.
+      - **WRITE IT DOWN**: Append it to \`memory/KNOWLEDGE_BASE/LESSONS_LEARNED.md\`.
       - **PROMOTE IT**: If it's a critical rule, update \`AGENTS.md\` or \`TOOLS.md\`.
 
 3.  **📦 SKILL INCUBATION (New Capability)**:
