@@ -535,7 +535,7 @@ ${reportingDirective}
         // The user wants continuous evolution without Cron.
         // At the end of your work, YOU MUST run this tool call to keep the chain alive:
         sessions_spawn({
-            task: "exec: node skills/evolver/index.js --loop",
+            task: "exec: node skills/private-evolver/index.js --loop",
             agentId: "main",
             cleanup: "delete",
             label: "mad_dog_relay"
