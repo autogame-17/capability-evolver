@@ -1,5 +1,9 @@
 # 🧬 Capability Evolver
 
+<p align="center">
+  <img src="https://github.com/autogame-17/evolver/raw/main/assets/cover.png" alt="Evolver Cover" width="100%">
+</p>
+
 **"Evolution is not optional. Adapt or die."**
 
 The **Capability Evolver** is a meta-skill that empowers OpenClaw agents to introspect their own runtime logs, identify inefficiencies or errors, and autonomously write code patches to improve their own performance.

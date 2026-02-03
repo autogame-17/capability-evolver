@@ -1,5 +1,9 @@
 # 🧬 Capability Evolver (能力进化引擎)
 
+<p align="center">
+  <img src="https://github.com/autogame-17/evolver/raw/main/assets/cover.png" alt="Evolver Cover" width="100%">
+</p>
+
 **“进化不是可选项，而是生存法则。”**
 
 **Capability Evolver** 是一个元技能（Meta-Skill），赋予 OpenClaw 智能体自我反省的能力。它可以扫描自身的运行日志，识别效率低下或报错的地方，并自主编写代码补丁来优化自身性能。
