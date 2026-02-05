@@ -105,6 +105,10 @@ MAJOR.MINOR.PATCH
 
 ## 更新日志
 
+### v1.4.1
+- 增加默认执行桥接：生成 GEP prompt 后输出 `sessions_spawn(...)`，自动派发执行型子智能体。
+- 将 prompt 作为交接工件写入 `memory/`，便于稳定交接与审计回放。
+
 ### v1.4.0
 - 增加显式 Mutation Protocol（repair/optimize/innovate），每轮进化必须生成 Mutation 对象并通过安全约束门控。
 - 增加 Personality Evolution：维护 PersonalityState，小幅 PersonalityMutation（单次不超过 ±0.2，最多 2 个参数），并基于成功率做自然选择收敛。

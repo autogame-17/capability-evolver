@@ -137,6 +137,10 @@ MAJOR.MINOR.PATCH
 
 ## Changelog
 
+### v1.4.1
+- Add execute-by-default bridge: after generating the GEP prompt, emit `sessions_spawn(...)` to spawn an executor agent.
+- Write prompt artifacts to `memory/` for reliable handoff and auditing.
+
 ### v1.4.0
 - Add explicit Mutation protocol (repair/optimize/innovate) and require Mutation per evolution run.
 - Add evolvable PersonalityState with small PersonalityMutation steps and natural selection statistics.

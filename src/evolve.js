@@ -27,6 +27,7 @@ const {
 const { writeStateForSolidify } = require('./gep/solidify');
 const { buildMutation, isHighRiskMutationAllowed } = require('./gep/mutation');
 const { selectPersonalityForRun } = require('./gep/personality');
+const { clip, writePromptArtifact, renderSessionsSpawnCall } = require('./gep/bridge');
 
 const REPO_ROOT = getRepoRoot();
 
@@ -899,8 +900,62 @@ ${mutationDirective}
     externalCandidatesPreview,
   });
 
-  console.log(prompt);
-  console.log('\n[SOLIDIFY REQUIRED] After applying the patch and validations, run: node index.js solidify');
+  const bridgeEnabled = String(process.env.EVOLVE_BRIDGE || '').toLowerCase() !== 'false';
+  const printPrompt = String(process.env.EVOLVE_PRINT_PROMPT || '').toLowerCase() === 'true';
+
+  // Default behavior (v1.4.1+): "execute-by-default" by bridging prompt -> sub-agent via sessions_spawn.
+  // This project is the Brain; the Hand is a spawned executor agent. Wrappers can disable bridging with EVOLVE_BRIDGE=false.
+  if (bridgeEnabled) {
+    const runId = `run_${Date.now()}`;
+    let artifact = null;
+    try {
+      artifact = writePromptArtifact({
+        memoryDir: MEMORY_DIR,
+        cycleId,
+        runId,
+        prompt,
+        meta: {
+          agent: AGENT_NAME,
+          drift_enabled: IS_RANDOM_DRIFT,
+          review_mode: IS_REVIEW_MODE,
+          dry_run: IS_DRY_RUN,
+          mutation_id: mutation && mutation.id ? mutation.id : null,
+          personality_key: personalitySelection && personalitySelection.personality_key ? personalitySelection.personality_key : null,
+        },
+      });
+    } catch (e) {
+      artifact = null;
+    }
+
+    const executorTask = [
+      'You are the executor (the Hand).',
+      'Your job is to apply a safe, minimal patch in this repo following the attached GEP protocol prompt.',
+      artifact && artifact.promptPath ? `Prompt file: ${artifact.promptPath}` : 'Prompt file: (unavailable)',
+      '',
+      'After applying changes and validations, you MUST run:',
+      '  node index.js solidify',
+      '',
+      'GEP protocol prompt (may be truncated here; prefer the prompt file if provided):',
+      clip(prompt, 24000),
+    ].join('\n');
+
+    const spawn = renderSessionsSpawnCall({
+      task: executorTask,
+      agentId: AGENT_NAME,
+      cleanup: 'delete',
+      label: `gep_bridge_${cycleNum}`,
+    });
+
+    console.log('\n[BRIDGE ENABLED] Spawning executor agent via sessions_spawn.');
+    console.log(spawn);
+    if (printPrompt) {
+      console.log('\n[PROMPT OUTPUT] (EVOLVE_PRINT_PROMPT=true)');
+      console.log(prompt);
+    }
+  } else {
+    console.log(prompt);
+    console.log('\n[SOLIDIFY REQUIRED] After applying the patch and validations, run: node index.js solidify');
+  }
 }
 
 module.exports = { run };
