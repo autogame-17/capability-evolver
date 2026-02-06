@@ -105,6 +105,9 @@ MAJOR.MINOR.PATCH
 
 ## 更新日志
 
+### v1.4.3
+- v1.4.3 发布准备。
+
 ### v1.4.2
 - 增加 loop 门控：上一轮未完成 solidify 时，不启动新一轮（避免 wrapper 造成超快空转）。
 - 修复固化状态写入覆盖问题：写入 last_run 时合并保留 last_solidify。
