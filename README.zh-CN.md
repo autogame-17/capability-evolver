@@ -105,6 +105,10 @@ MAJOR.MINOR.PATCH
 
 ## 更新日志
 
+### v1.4.2
+- 增加 loop 门控：上一轮未完成 solidify 时，不启动新一轮（避免 wrapper 造成超快空转）。
+- 修复固化状态写入覆盖问题：写入 last_run 时合并保留 last_solidify。
+
 ### v1.4.1
 - 增加默认执行桥接：生成 GEP prompt 后输出 `sessions_spawn(...)`，自动派发执行型子智能体。
 - 将 prompt 作为交接工件写入 `memory/`，便于稳定交接与审计回放。
