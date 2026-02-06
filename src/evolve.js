@@ -24,7 +24,7 @@ const {
   recordOutcomeFromState,
   memoryGraphPath,
 } = require('./gep/memoryGraph');
-const { writeStateForSolidify } = require('./gep/solidify');
+const { readStateForSolidify, writeStateForSolidify } = require('./gep/solidify');
 const { buildMutation, isHighRiskMutationAllowed } = require('./gep/mutation');
 const { selectPersonalityForRun } = require('./gep/personality');
 const { clip, writePromptArtifact, renderSessionsSpawnCall } = require('./gep/bridge');
@@ -377,7 +377,37 @@ function performMaintenance() {
   }
 }
 
+function sleepMs(ms) {
+  const t = Number(ms);
+  const n = Number.isFinite(t) ? Math.max(0, t) : 0;
+  return new Promise(resolve => setTimeout(resolve, n));
+}
+
 async function run() {
+  const bridgeEnabled = String(process.env.EVOLVE_BRIDGE || '').toLowerCase() !== 'false';
+  const loopMode = ARGS.includes('--loop') || ARGS.includes('--mad-dog') || String(process.env.EVOLVE_LOOP || '').toLowerCase() === 'true';
+
+  // Loop gating: do not start a new cycle until the previous one is solidified.
+  // This prevents wrappers from "fast-cycling" the Brain without waiting for the Hand to finish.
+  if (bridgeEnabled && loopMode) {
+    try {
+      const st = readStateForSolidify();
+      const lastRun = st && st.last_run ? st.last_run : null;
+      const lastSolid = st && st.last_solidify ? st.last_solidify : null;
+      if (lastRun && lastRun.run_id) {
+        const pending = !lastSolid || !lastSolid.run_id || String(lastSolid.run_id) !== String(lastRun.run_id);
+        if (pending) {
+          console.log(`[BRIDGE WAIT] Previous run pending solidify: ${String(lastRun.run_id)}. Waiting...`);
+          // Backoff to avoid tight loops and disk churn.
+          await sleepMs(3000);
+          return;
+        }
+      }
+    } catch (e) {
+      // If we cannot read state, proceed (fail open) to avoid deadlock.
+    }
+  }
+
   const startTime = Date.now();
   console.log('Scanning session logs...');
 
@@ -771,6 +801,7 @@ async function run() {
   // Solidify state: capture minimal, auditable context for post-patch validation + asset write.
   // This enforces strict protocol closure after patch application.
   try {
+    const runId = `run_${Date.now()}`;
     const parentEventId = getLastEventId();
     const selectedBy = memoryAdvice && memoryAdvice.preferredGeneId ? 'memory_graph+selector' : 'selector';
 
@@ -809,9 +840,10 @@ async function run() {
       lines: Number.isFinite(maxFiles) && maxFiles > 0 ? Math.round(maxFiles * 80) : 0,
     };
 
-    writeStateForSolidify({
-      last_run: {
-        run_id: `run_${Date.now()}`,
+    // Merge into existing state to preserve last_solidify (do not wipe it).
+    const prevState = readStateForSolidify();
+    prevState.last_run = {
+        run_id: runId,
         created_at: new Date().toISOString(),
         parent_event_id: parentEventId || null,
         selected_gene_id: selectedGene && selectedGene.id ? selectedGene.id : null,
@@ -832,8 +864,8 @@ async function run() {
         baseline_untracked: baselineUntracked,
         baseline_git_head: baselineHead,
         blast_radius_estimate: blastRadiusEstimate,
-      },
-    });
+      };
+    writeStateForSolidify(prevState);
   } catch (e) {
     console.error(`[SolidifyState] Write failed: ${e.message}`);
   }
@@ -900,13 +932,17 @@ ${mutationDirective}
     externalCandidatesPreview,
   });
 
-  const bridgeEnabled = String(process.env.EVOLVE_BRIDGE || '').toLowerCase() !== 'false';
   const printPrompt = String(process.env.EVOLVE_PRINT_PROMPT || '').toLowerCase() === 'true';
 
   // Default behavior (v1.4.1+): "execute-by-default" by bridging prompt -> sub-agent via sessions_spawn.
   // This project is the Brain; the Hand is a spawned executor agent. Wrappers can disable bridging with EVOLVE_BRIDGE=false.
   if (bridgeEnabled) {
-    const runId = `run_${Date.now()}`;
+    // Reuse the run_id stored in the solidify state when possible.
+    let runId = `run_${Date.now()}`;
+    try {
+      const st = readStateForSolidify();
+      if (st && st.last_run && st.last_run.run_id) runId = String(st.last_run.run_id);
+    } catch (e) {}
     let artifact = null;
     try {
       artifact = writePromptArtifact({
@@ -934,6 +970,10 @@ ${mutationDirective}
       '',
       'After applying changes and validations, you MUST run:',
       '  node index.js solidify',
+      '',
+      'Loop chaining (only if you are running in loop mode): after solidify succeeds, print a sessions_spawn call to start the next loop run with a short delay.',
+      'Example:',
+      'sessions_spawn({ task: "exec: sleep 3 && node index.js --loop", agentId: "main", cleanup: "delete", label: "gep_loop_next" })',
       '',
       'GEP protocol prompt (may be truncated here; prefer the prompt file if provided):',
       clip(prompt, 24000),

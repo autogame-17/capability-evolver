@@ -137,6 +137,10 @@ MAJOR.MINOR.PATCH
 
 ## Changelog
 
+### v1.4.2
+- Add loop gating: do not start a new cycle until the previous run is solidified (prevents fast empty cycles).
+- Preserve `last_solidify` when writing solidify state (merge instead of overwrite).
+
 ### v1.4.1
 - Add execute-by-default bridge: after generating the GEP prompt, emit `sessions_spawn(...)` to spawn an executor agent.
 - Write prompt artifacts to `memory/` for reliable handoff and auditing.

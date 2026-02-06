@@ -10,6 +10,8 @@ async function main() {
     console.log('Starting capability evolver...');
     
     if (isLoop) {
+        // Signal evolve.js to enable loop gating/chain behavior.
+        process.env.EVOLVE_LOOP = 'true';
         console.log('Loop mode enabled (relay).');
         // [RELAY MODE RESTORED 2026-02-03]
         // Run once, then let evolve.js trigger the next agent via sessions_spawn.
