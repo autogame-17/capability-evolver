@@ -137,6 +137,9 @@ MAJOR.MINOR.PATCH
 
 ## Changelog
 
+### v1.6.2
+- Fix rollback safety: only revert tracked files changed during the run, preserving pre-existing local modifications.
+
 ### v1.6.1
 - Expand vibe testing to 16 tests (13 deterministic + 3 LLM-driven).
 - Add T8 personality_evolution, T9 memory_graph_causal, T10 a2a_ingest_promote, T11 selector_gene_match, T12 prompt_structure.
