@@ -6,6 +6,8 @@ var OPPORTUNITY_SIGNALS = [
   'capability_gap',
   'stable_success_plateau',
   'external_opportunity',
+  'recurring_error',
+  'unsupported_input_type',
 ];
 
 function hasOpportunitySignal(signals) {
@@ -57,6 +59,30 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
 
   // Protocol-specific drift signals
   if (lower.includes('prompt') && !lower.includes('evolutionevent')) signals.push('protocol_drift');
+
+  // --- Recurring error detection (robustness signals) ---
+  // Count repeated identical errors -- these indicate systemic issues that need automated fixes
+  try {
+    var errorCounts = {};
+    var errPatterns = corpus.match(/(?:LLM error|"error"|"status":\s*"error")[^}]{0,200}/gi) || [];
+    for (var ep = 0; ep < errPatterns.length; ep++) {
+      // Normalize to a short key
+      var key = errPatterns[ep].replace(/\s+/g, ' ').slice(0, 100);
+      errorCounts[key] = (errorCounts[key] || 0) + 1;
+    }
+    var recurringErrors = Object.entries(errorCounts).filter(function (e) { return e[1] >= 3; });
+    if (recurringErrors.length > 0) {
+      signals.push('recurring_error');
+      // Include the top recurring error signature for the agent to diagnose
+      var topErr = recurringErrors.sort(function (a, b) { return b[1] - a[1]; })[0];
+      signals.push('recurring_errsig(' + topErr[1] + 'x):' + topErr[0].slice(0, 150));
+    }
+  } catch (e) {}
+
+  // --- Unsupported input type (e.g. GIF, video formats the LLM can't handle) ---
+  if (/unsupported mime|unsupported.*type|invalid.*mime/i.test(lower)) {
+    signals.push('unsupported_input_type');
+  }
 
   // --- Opportunity signals (innovation / feature requests) ---
 

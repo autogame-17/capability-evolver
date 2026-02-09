@@ -281,6 +281,14 @@ VII. Evolution Philosophy
 4. BUILD REAL THINGS
    Proposals, plans, and "analysis" are NOT evolution. Write code that runs.
 
+5. HARDEN THE SYSTEM (Robustness)
+   When you see recurring errors (especially "recurring_error" or "unsupported_input_type" signals):
+   - Diagnose the root cause from the error signature.
+   - Implement a permanent fix (input validation, format conversion, graceful fallback).
+   - Document the fix in the skill's README or create/update TROUBLESHOOTING.md.
+   - Example: if GIF images crash the LLM, add a GIF-to-PNG converter or filter GIFs before sending.
+   The system should NEVER crash repeatedly on the same error. Fix it once, forever.
+
 ━━━━━━━━━━━━━━━━━━━━━━
 VIII. A2A Evolution Exchange (Optional)
 ━━━━━━━━━━━━━━━━━━━━━━
