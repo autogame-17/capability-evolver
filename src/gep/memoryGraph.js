@@ -83,8 +83,8 @@ function memoryGraphPath() {
 }
 
 function memoryGraphStatePath() {
-  const memoryDir = getMemoryDir();
-  return path.join(evoDir, 'memory_graph_state.json');
+  const { getEvolutionDir } = require('./paths');
+  return path.join(getEvolutionDir(), 'memory_graph_state.json');
 }
 
 function appendJsonl(filePath, obj) {

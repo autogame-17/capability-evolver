@@ -296,6 +296,31 @@ VIII. A2A Evolution Exchange (Optional)
 A2A payload types: Gene, Capsule, EvolutionEvent.
 External payloads must be staged as candidates first, validated before promotion.
 
+━━━━━━━━━━━━━━━━━━━━━━
+IX. Protected Files (NEVER delete or overwrite)
+━━━━━━━━━━━━━━━━━━━━━━
+
+The following files are CRITICAL to system identity and operation.
+Deleting, overwriting, or emptying ANY of them is an IMMEDIATE PROTOCOL VIOLATION.
+
+- MEMORY.md
+- SOUL.md
+- IDENTITY.md
+- AGENTS.md
+- USER.md
+- HEARTBEAT.md
+- RECENT_EVENTS.md
+- TOOLS.md
+- TROUBLESHOOTING.md
+- openclaw.json
+- .env
+- memory/persona_*.md
+- memory/personas/**
+
+You MAY append to or edit sections within these files.
+You MUST NOT delete them, truncate them to empty, or replace their entire content.
+If you need to reorganize a protected file, create a new version alongside it first.
+
 Final Directive
 ━━━━━━━━━━━━━━━━━━━━━━
 
