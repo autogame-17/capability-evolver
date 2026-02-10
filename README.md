@@ -40,7 +40,11 @@ The **Capability Evolver** inspects runtime history, extracts signals, selects a
 - **Auto-Log Analysis**: scans memory and history files for errors and patterns.
 - **Self-Repair Guidance**: emits repair-focused directives from signals.
 - **GEP Protocol**: standardized evolution with reusable assets.
-- **Mutation + Personality Evolution (GEP v1.4)**: each evolution run is gated by an explicit Mutation object and an evolvable PersonalityState.
+- **Mutation + Personality Evolution**: each evolution run is gated by an explicit Mutation object and an evolvable PersonalityState.
+- **Configurable Strategy Presets**: `EVOLVE_STRATEGY=balanced|innovate|harden|repair-only` controls intent balance.
+- **Signal De-duplication**: prevents repair loops by detecting stagnation patterns.
+- **Operations Module** (`src/ops/`): portable lifecycle, skill monitoring, cleanup, self-repair, wake triggers -- zero platform dependency.
+- **Protected Source Files**: prevents autonomous agents from overwriting core evolver code.
 - **One-Command Evolution**: `node index.js` to generate the prompt.
 
 ## Typical Use Cases
@@ -100,6 +104,21 @@ node index.js --review
 node index.js --loop
 ```
 
+### With Strategy Preset
+```bash
+EVOLVE_STRATEGY=innovate node index.js --loop   # maximize new features
+EVOLVE_STRATEGY=harden node index.js --loop     # focus on stability
+EVOLVE_STRATEGY=repair-only node index.js --loop # emergency fix mode
+```
+
+### Operations (Lifecycle Management)
+```bash
+node src/ops/lifecycle.js start    # start evolver loop in background
+node src/ops/lifecycle.js stop     # graceful stop (SIGTERM -> SIGKILL)
+node src/ops/lifecycle.js status   # show running state
+node src/ops/lifecycle.js check    # health check + auto-restart if stagnant
+```
+
 ## Public Release
 
 This repository is the public distribution.
@@ -136,6 +155,35 @@ MAJOR.MINOR.PATCH
 - PATCH: backward-compatible bug fixes
 
 ## Changelog
+
+### v1.10.0
+- **Operations Module** (`src/ops/`): 6 portable modules extracted from environment-specific wrapper:
+  - `lifecycle.js` -- process start/stop/restart/status/health check
+  - `skills_monitor.js` -- skill health audit with auto-heal (npm install, SKILL.md stub)
+  - `cleanup.js` -- GEP artifact disk cleanup
+  - `trigger.js` -- wake signal mechanism
+  - `commentary.js` -- persona-based cycle commentary
+  - `self_repair.js` -- git emergency repair (abort rebase, remove stale locks)
+- **Configurable Evolution Strategy** (`EVOLVE_STRATEGY` env var):
+  - 4 presets: `balanced` (default 50/30/20), `innovate` (80/15/5), `harden` (20/40/40), `repair-only` (0/20/80)
+  - Strategy-aware signal filtering with per-preset repair loop thresholds
+  - Backward compatible: `FORCE_INNOVATION=true` maps to `innovate`
+- **Signal De-duplication**: repair ratio check forces innovation when >= 50% of last 8 cycles are repairs (threshold varies by strategy).
+- **Tool Usage Analytics**: detects high-frequency tool usage patterns in logs (auto-evolved by Hand Agent).
+- **Protected Source Files** (GEP Section IX): evolver core .js files listed as immutable to prevent Hand Agent overwrites.
+- **Forbidden Innovation Zones** (GEP Section X): prevents creation of duplicate loop managers, watchdogs, skill monitors.
+- **Known Issues List** (GEP Section VII.6): tells the LLM to skip already-fixed errors.
+- **Resilience**: replaced `process.exit(2)` with `throw Error()` for MemoryGraph failures (loop survives transient errors).
+- **Gene Limits Relaxed**: repair max_files 12->20, innovate max_files 8->25.
+- `paths.js`: added `getWorkspaceRoot()`, `getSkillsDir()`, `getLogsDir()`.
+
+### v1.9.2
+- Intermediate release with strategy presets and protected files.
+
+### v1.9.1
+- Signal de-duplication (repair ratio check).
+- Singleton Guard (PID lock file).
+- Environment fingerprint in GEP prompt.
 
 ### v1.6.0
 - Add innovation/opportunity signal detection: user_feature_request, user_improvement_suggestion, perf_bottleneck, capability_gap, stable_success_plateau, external_opportunity.
