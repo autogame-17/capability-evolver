@@ -72,7 +72,24 @@ function analyzeRecentHistory(recentEvents) {
 
   var recentIntents = recent.map(function(e) { return e.intent || 'unknown'; });
 
-  return { suppressedSignals: suppressedSignals, recentIntents: recentIntents, consecutiveRepairCount: consecutiveRepairCount, signalFreq: signalFreq, geneFreq: geneFreq };
+  // Track recent innovation targets to prevent repeated work on the same skill/module
+  var recentInnovationTargets = {};
+  for (var ti = 0; ti < recent.length; ti++) {
+    var tevt = recent[ti];
+    if (tevt.intent === 'innovate' && tevt.mutation_id) {
+      var tgt = (tevt.mutation && tevt.mutation.target) || '';
+      if (!tgt) {
+        var sum = String(tevt.summary || tevt.capsule_summary || '');
+        var skillMatch = sum.match(/skills\/([a-zA-Z0-9_-]+)/);
+        if (skillMatch) tgt = 'skills/' + skillMatch[1];
+      }
+      if (tgt) {
+        recentInnovationTargets[tgt] = (recentInnovationTargets[tgt] || 0) + 1;
+      }
+    }
+  }
+
+  return { suppressedSignals: suppressedSignals, recentIntents: recentIntents, consecutiveRepairCount: consecutiveRepairCount, signalFreq: signalFreq, geneFreq: geneFreq, recentInnovationTargets: recentInnovationTargets };
 }
 
 function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, userSnippet, recentEvents }) {

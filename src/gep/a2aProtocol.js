@@ -78,14 +78,19 @@ function buildPublish(opts) {
   if (!asset || !asset.type || !asset.id) {
     throw new Error('publish: asset must have type and id');
   }
+  // Generate signature: HMAC-SHA256 of asset_id with node secret
+  var assetIdVal = asset.asset_id || computeAssetId(asset);
+  var nodeSecret = process.env.A2A_NODE_SECRET || getNodeId();
+  var signature = crypto.createHmac('sha256', nodeSecret).update(assetIdVal).digest('hex');
   return buildMessage({
     messageType: 'publish',
     senderId: o.nodeId,
     payload: {
       asset_type: asset.type,
-      asset_id: asset.asset_id || computeAssetId(asset),
+      asset_id: assetIdVal,
       local_id: asset.id,
       asset: asset,
+      signature: signature,
     },
   });
 }

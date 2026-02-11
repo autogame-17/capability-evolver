@@ -156,6 +156,10 @@ MAJOR.MINOR.PATCH
 
 ## Changelog
 
+### v1.10.1
+- **Innovation Cooldown**: Track recent innovation targets in `analyzeRecentHistory()` and inject `Context [Innovation Cooldown]` into GEP prompt, preventing the Hand Agent from repeatedly innovating on the same skill/module across consecutive cycles.
+- **Signal Enhancement**: `analyzeRecentHistory()` now returns `recentInnovationTargets` (map of target path to count in last 10 events).
+
 ### v1.10.0
 - **Operations Module** (`src/ops/`): 6 portable modules extracted from environment-specific wrapper:
   - `lifecycle.js` -- process start/stop/restart/status/health check
@@ -171,7 +175,7 @@ MAJOR.MINOR.PATCH
 - **Signal De-duplication**: repair ratio check forces innovation when >= 50% of last 8 cycles are repairs (threshold varies by strategy).
 - **Tool Usage Analytics**: detects high-frequency tool usage patterns in logs (auto-evolved by Hand Agent).
 - **Protected Source Files** (GEP Section IX): evolver core .js files listed as immutable to prevent Hand Agent overwrites.
-- **Forbidden Innovation Zones** (GEP Section X): prevents creation of duplicate loop managers, watchdogs, skill monitors.
+- **Forbidden Innovation Zones** (GEP Section X): prevents creation of skills that duplicate existing infrastructure (process management, health monitoring, scheduling).
 - **Known Issues List** (GEP Section VII.6): tells the LLM to skip already-fixed errors.
 - **Resilience**: replaced `process.exit(2)` with `throw Error()` for MemoryGraph failures (loop survives transient errors).
 - **Gene Limits Relaxed**: repair max_files 12->20, innovate max_files 8->25.

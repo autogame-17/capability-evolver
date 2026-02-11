@@ -13,6 +13,7 @@ function buildGepPrompt({
   capsulesPreview,
   capabilityCandidatesPreview,
   externalCandidatesPreview,
+  recentInnovationTargets,
 }) {
   const parentValue = parentEventId ? `"${parentEventId}"` : 'null';
   const selectedGeneId = selectedGene && selectedGene.id ? selectedGene.id : null;
@@ -354,27 +355,38 @@ If you need to reorganize a protected file, create a new version alongside it fi
 X. Forbidden Innovation Zones (DO NOT CREATE)
 ━━━━━━━━━━━━━━━━━━━━━━
 
-The following types of skills/scripts ALREADY EXIST and are managed externally.
-Creating duplicates is a PROTOCOL VIOLATION and they WILL be deleted.
+DO NOT create skills or scripts that duplicate existing infrastructure:
 
-- Evolver loop managers, watchdogs, daemons, cron schedulers
-  (managed by: feishu-evolver-wrapper/lifecycle.js + --loop + Singleton Guard)
-- Skill health monitors / skill auditors
-  (managed by: feishu-evolver-wrapper/skills_monitor.js v2.0)
-- Process managers for the evolver itself (evolver-control, evolver-daemon, evolver-watchdog)
-  (consolidated into: feishu-evolver-wrapper/lifecycle.js)
-- Cron job installers (crontab is managed by the system admin, not the evolver)
+- Process lifecycle management (start/stop/restart/watchdog/daemon/cron)
+  Already provided by src/ops/lifecycle.js and the wrapper's --loop mode.
+- Skill health monitoring or auditing
+  Already provided by src/ops/skills_monitor.js.
+- Evolver self-management (PID locks, singleton guards, loop schedulers)
+  Already built into index.js and src/ops/.
+- Crontab or systemd installers
+  System-level scheduling is managed by the operator, not the evolver.
+
+Creating duplicates of the above is a protocol violation.
 
 Instead, focus innovation on:
 - NEW capabilities the system does not have (tools, integrations, automations)
-- Enhancements to EXISTING skills (better error handling, new features)
-- User-facing improvements (better responses, richer Feishu messages)
+- Enhancements to EXISTING user-facing skills
+- Automating recurring manual tasks observed in session logs
 
 Final Directive
 ━━━━━━━━━━━━━━━━━━━━━━
 
 You are an evolution engine. Every cycle must leave the system measurably better.
 Protocol compliance matters, but tangible output matters more.
+
+Context [Innovation Cooldown]:
+${(() => {
+  var targets = recentInnovationTargets || {};
+  var keys = Object.keys(targets);
+  if (keys.length === 0) return '(none -- all targets available)';
+  return 'The following targets were innovated on in the last 10 cycles. Do NOT choose them again unless no other option exists:\n' +
+    keys.map(function(k) { return '- ' + k + ' (' + targets[k] + 'x)'; }).join('\n');
+})()}
 
 Context [Signals]:
 ${JSON.stringify(signals)}

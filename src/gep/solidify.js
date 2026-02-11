@@ -461,6 +461,15 @@ function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } 
       outcome: { status: 'success', score },
       success_streak: 1,
       env_fingerprint: envFp,
+      metadata: {
+        author: process.env.A2A_NODE_ID || process.env.AGENT_NAME || 'unknown',
+        tags: signals.slice(0, 5),
+        created_at: ts,
+      },
+      performance_metrics: {
+        reuse_potential: prevCapsule ? 'high' : 'medium',
+        blast_efficiency: blast.files > 0 ? Math.round((blast.lines / blast.files) * 10) / 10 : 0,
+      },
       a2a: { eligible_to_broadcast: false },
     };
     capsule.asset_id = computeAssetId(capsule);

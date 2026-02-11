@@ -3,7 +3,7 @@ const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
 const { getRepoRoot, getMemoryDir } = require('./gep/paths');
-const { extractSignals } = require('./gep/signals');
+const { extractSignals, analyzeRecentHistory } = require('./gep/signals');
 const {
   loadGenes,
   loadCapsules,
@@ -979,6 +979,9 @@ Mutation directive:
 ${mutationDirective}
 `.trim();
 
+  // Analyze recent history for innovation cooldown
+  const historyAnalysis = analyzeRecentHistory(recentEvents);
+
   const prompt = buildGepPrompt({
     nowIso: new Date().toISOString(),
     context,
@@ -991,6 +994,7 @@ ${mutationDirective}
     capsulesPreview,
     capabilityCandidatesPreview,
     externalCandidatesPreview,
+    recentInnovationTargets: historyAnalysis.recentInnovationTargets || {},
   });
 
   // Optional: emit a compact thought process block for wrappers (noise-controlled).
