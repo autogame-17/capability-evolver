@@ -23,6 +23,7 @@ function uniqStrings(list) {
 
 function hasErrorishSignal(signals) {
   const list = Array.isArray(signals) ? signals.map(s => String(s || '')) : [];
+  if (list.includes('issue_already_resolved') || list.includes('openclaw_self_healed')) return false;
   if (list.includes('log_error')) return true;
   if (list.some(s => s.startsWith('errsig:') || s.startsWith('errsig_norm:'))) return true;
   return false;
@@ -36,6 +37,9 @@ var OPPORTUNITY_SIGNALS = [
   'capability_gap',
   'stable_success_plateau',
   'external_opportunity',
+  'issue_already_resolved',
+  'openclaw_self_healed',
+  'empty_cycle_loop_detected',
 ];
 
 function hasOpportunitySignal(signals) {
@@ -51,6 +55,12 @@ function mutationCategoryFromContext({ signals, driftEnabled }) {
   if (driftEnabled) return 'innovate';
   // Auto-innovate: opportunity signals present and no errors
   if (hasOpportunitySignal(signals)) return 'innovate';
+  // Consult strategy preset: if the configured strategy favors innovation,
+  // default to innovate instead of optimize when there is nothing specific to do.
+  try {
+    var strategy = require('./strategy').resolveStrategy();
+    if (strategy && typeof strategy.innovate === 'number' && strategy.innovate >= 0.5) return 'innovate';
+  } catch (_) {}
   return 'optimize';
 }
 

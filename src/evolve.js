@@ -357,6 +357,9 @@ function getNextCycleId() {
 }
 
 function performMaintenance() {
+  // Auto-update check (rate-limited, non-fatal).
+  checkAndAutoUpdate();
+
   try {
     if (!fs.existsSync(AGENT_SESSIONS_DIR)) return;
 
@@ -408,6 +411,91 @@ function performMaintenance() {
     }
   } catch (e) {
     console.error(`[Maintenance] Error: ${e.message}`);
+  }
+}
+
+// --- Auto-update: check for newer versions of evolver and wrapper on ClawHub ---
+function checkAndAutoUpdate() {
+  try {
+    // Read config: default autoUpdate = true
+    const configPath = path.join(os.homedir(), '.openclaw', 'openclaw.json');
+    let autoUpdate = true;
+    let intervalHours = 6;
+    try {
+      if (fs.existsSync(configPath)) {
+        const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        if (cfg.evolver && cfg.evolver.autoUpdate === false) autoUpdate = false;
+        if (cfg.evolver && Number.isFinite(Number(cfg.evolver.autoUpdateIntervalHours))) {
+          intervalHours = Number(cfg.evolver.autoUpdateIntervalHours);
+        }
+      }
+    } catch (_) {}
+
+    if (!autoUpdate) return;
+
+    // Rate limit: only check once per interval
+    const stateFile = path.join(MEMORY_DIR, 'evolver_update_check.json');
+    const now = Date.now();
+    const intervalMs = intervalHours * 60 * 60 * 1000;
+    try {
+      if (fs.existsSync(stateFile)) {
+        const state = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+        if (state.lastCheckedAt && (now - new Date(state.lastCheckedAt).getTime()) < intervalMs) {
+          return; // Too soon, skip
+        }
+      }
+    } catch (_) {}
+
+    // Find clawhub binary
+    let clawhubBin = null;
+    const candidates = ['clawhub', path.join(os.homedir(), '.npm-global/bin/clawhub'), '/usr/local/bin/clawhub'];
+    for (const c of candidates) {
+      try {
+        if (c === 'clawhub') {
+          execSync('which clawhub', { stdio: 'ignore', timeout: 3000 });
+          clawhubBin = 'clawhub';
+          break;
+        }
+        if (fs.existsSync(c)) { clawhubBin = c; break; }
+      } catch (_) {}
+    }
+    if (!clawhubBin) return; // No clawhub CLI available
+
+    // Update evolver and feishu-evolver-wrapper
+    const slugs = ['evolver', 'feishu-evolver-wrapper'];
+    let updated = false;
+    for (const slug of slugs) {
+      try {
+        const out = execSync(`${clawhubBin} update ${slug} --force`, {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          timeout: 30000,
+          cwd: path.resolve(REPO_ROOT, '..'),
+        });
+        if (out && !out.includes('already up to date') && !out.includes('not installed')) {
+          console.log(`[AutoUpdate] ${slug}: ${out.trim().split('\n').pop()}`);
+          updated = true;
+        }
+      } catch (e) {
+        // Non-fatal: update failure should never block evolution
+      }
+    }
+
+    // Write state
+    try {
+      const stateData = {
+        lastCheckedAt: new Date(now).toISOString(),
+        updated,
+      };
+      fs.writeFileSync(stateFile, JSON.stringify(stateData, null, 2) + '\n');
+    } catch (_) {}
+
+    if (updated) {
+      console.log('[AutoUpdate] Skills updated. Changes will take effect on next wrapper restart.');
+    }
+  } catch (e) {
+    // Entire auto-update is non-fatal
+    console.log(`[AutoUpdate] Check failed (non-fatal): ${e.message}`);
   }
 }
 

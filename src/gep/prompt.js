@@ -76,25 +76,77 @@ function truncateContext(text, maxLength = 20000) {
 
 /**
  * Strict schema definitions for the prompt to reduce drift.
- * UPDATED: 2026-02-12 (Protocol Drift Fix)
+ * UPDATED: 2026-02-12 (Protocol Drift Fix v2 - Strict JSON)
  */
 const SCHEMA_DEFINITIONS = `
+━━━━━━━━━━━━━━━━━━━━━━
+I. Mandatory Evolution Object Model (Output EXACTLY these 5 objects)
+━━━━━━━━━━━━━━━━━━━━━━
+
+Output separate JSON objects. DO NOT wrap in a single array. DO NOT use markdown code blocks (like \`\`\`json).
+Missing any object = PROTOCOL FAILURE.
+STRICT JSON ONLY. NO CHITCHAT.
+
 0. Mutation (The Trigger) - MUST BE FIRST
-   { "type": "Mutation", "id": "mut_<timestamp>", "category": "repair|optimize|innovate", "trigger_signals": ["<signal_string>"], "target": "<module_or_gene_id>", "expected_effect": "<outcome_description>", "risk_level": "low|medium|high" }
+   {
+     "type": "Mutation",
+     "id": "mut_<timestamp>",
+     "category": "repair|optimize|innovate",
+     "trigger_signals": ["<signal_string>"],
+     "target": "<module_or_gene_id>",
+     "expected_effect": "<outcome_description>",
+     "risk_level": "low|medium|high",
+     "rationale": "<why_this_change_is_necessary>"
+   }
 
 1. PersonalityState (The Mood)
-   { "type": "PersonalityState", "rigor": 0.0-1.0, "creativity": 0.0-1.0, "verbosity": 0.0-1.0, "risk_tolerance": 0.0-1.0, "obedience": 0.0-1.0 }
+   {
+     "type": "PersonalityState",
+     "rigor": 0.0-1.0,
+     "creativity": 0.0-1.0,
+     "verbosity": 0.0-1.0,
+     "risk_tolerance": 0.0-1.0,
+     "obedience": 0.0-1.0
+   }
 
 2. EvolutionEvent (The Record)
-   { "type": "EvolutionEvent", "id": "evt_<timestamp>", "parent": <parent_evt_id|null>, "intent": "repair|optimize|innovate", "signals": ["<signal_string>"], "genes_used": ["<gene_id>"], "mutation_id": "<mut_id>", "personality_state": { ... }, "blast_radius": { "files": N, "lines": N }, "outcome": { "status": "success|failed", "score": 0.0-1.0 } }
+   {
+     "type": "EvolutionEvent",
+     "id": "evt_<timestamp>",
+     "parent": <parent_evt_id|null>,
+     "intent": "repair|optimize|innovate",
+     "signals": ["<signal_string>"],
+     "genes_used": ["<gene_id>"],
+     "mutation_id": "<mut_id>",
+     "personality_state": { ... },
+     "blast_radius": { "files": N, "lines": N },
+     "outcome": { "status": "success|failed", "score": 0.0-1.0 }
+   }
 
 3. Gene (The Knowledge)
    - Reuse/update existing ID if possible. Create new only if novel pattern.
-   { "type": "Gene", "id": "gene_<name>", "category": "repair|optimize|innovate", "signals_match": ["<pattern>"], "preconditions": ["<condition>"], "strategy": ["<step_1>"], "constraints": { "max_files": N, "forbidden_paths": [] }, "validation": ["<node_command>"] }
+   {
+     "type": "Gene",
+     "id": "gene_<name>",
+     "category": "repair|optimize|innovate",
+     "signals_match": ["<pattern>"],
+     "preconditions": ["<condition>"],
+     "strategy": ["<step_1>", "<step_2>"],
+     "constraints": { "max_files": N, "forbidden_paths": [] },
+     "validation": ["<node_command>"]
+   }
 
 4. Capsule (The Result)
    - Only on success. Reference Gene used.
-   { "type": "Capsule", "id": "capsule_<timestamp>", "trigger": ["<signal_string>"], "gene": "<gene_id>", "summary": "<one sentence summary>", "confidence": 0.0-1.0, "blast_radius": { "files": N, "lines": N } }
+   {
+     "type": "Capsule",
+     "id": "capsule_<timestamp>",
+     "trigger": ["<signal_string>"],
+     "gene": "<gene_id>",
+     "summary": "<one sentence summary>",
+     "confidence": 0.0-1.0,
+     "blast_radius": { "files": N, "lines": N }
+   }
 `.trim();
 
 function buildGepPrompt({
@@ -138,11 +190,6 @@ GEP — GENOME EVOLUTION PROTOCOL (v1.10.0 STRICT)${cycleLabel} [${nowIso}]
 
 You are a protocol-bound evolution engine. Compliance overrides optimality.
 
-━━━━━━━━━━━━━━━━━━━━━━
-I. Mandatory Evolution Object Model (Output EXACTLY these 5 objects)
-━━━━━━━━━━━━━━━━━━━━━━
-
-Output separate JSON objects. DO NOT wrap in a single array. Missing any = PROTOCOL FAILURE.
 ${schemaSection}
 
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -163,7 +210,7 @@ PHILOSOPHY:
 - Innovate > Maintain: 60% innovation.
 - Robustness: Fix recurring errors permanently.
 - Safety: Never delete protected files (MEMORY.md, SOUL.md).
-- Strictness: NO CHITCHAT. NO MARKDOWN WRAPPERS around JSON if possible.
+- Strictness: NO CHITCHAT. NO MARKDOWN WRAPPERS around JSON. Output RAW JSON objects separated by newlines.
 
 CONSTRAINTS:
 - No \`exec\` for messaging (use feishu-post/card).

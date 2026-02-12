@@ -70,7 +70,18 @@ function analyzeRecentHistory(recentEvents) {
 
   var recentIntents = recent.map(function(e) { return e.intent || 'unknown'; });
 
-  return { suppressedSignals: suppressedSignals, recentIntents: recentIntents, consecutiveRepairCount: consecutiveRepairCount, signalFreq: signalFreq, geneFreq: geneFreq };
+  // Count empty cycles (blast_radius.files === 0) in last 8 events.
+  // High ratio indicates the evolver is spinning without producing real changes.
+  var emptyCycleCount = 0;
+  for (var ec = 0; ec < tail.length; ec++) {
+    var br = tail[ec].blast_radius;
+    var em = tail[ec].meta && tail[ec].meta.empty_cycle;
+    if (em || (br && br.files === 0 && br.lines === 0)) {
+      emptyCycleCount++;
+    }
+  }
+
+  return { suppressedSignals: suppressedSignals, recentIntents: recentIntents, consecutiveRepairCount: consecutiveRepairCount, emptyCycleCount: emptyCycleCount, signalFreq: signalFreq, geneFreq: geneFreq };
 }
 
 function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, userSnippet, recentEvents }) {
@@ -239,6 +250,17 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
     }
     // Append a directive signal that the prompt can pick up
     signals.push('force_innovation_after_repair_loop');
+  }
+
+  // --- Force innovation after too many empty cycles (zero blast radius) ---
+  // If >= 50% of last 8 cycles produced no code changes, the evolver is spinning idle.
+  // Strip repair signals and force innovate to break the empty loop.
+  if (history.emptyCycleCount >= 4) {
+    signals = signals.filter(function (s) {
+      return s !== 'log_error' && !s.startsWith('errsig:') && !s.startsWith('recurring_errsig');
+    });
+    if (!signals.includes('empty_cycle_loop_detected')) signals.push('empty_cycle_loop_detected');
+    if (!signals.includes('stable_success_plateau')) signals.push('stable_success_plateau');
   }
 
   // If no signals at all, add a default innovation signal
