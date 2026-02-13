@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
-const { getRepoRoot, getMemoryDir } = require('./gep/paths');
+const { getRepoRoot, getMemoryDir, getSessionScope } = require('./gep/paths');
 const { extractSignals } = require('./gep/signals');
 const {
   loadGenes,
@@ -159,6 +159,11 @@ function readRealSessionLog() {
     const TARGET_BYTES = 120000;
     const PER_SESSION_BYTES = 20000; // Read tail of each active session
 
+    // Session scope isolation: when EVOLVER_SESSION_SCOPE is set,
+    // only read sessions whose filenames contain the scope identifier.
+    // This prevents cross-channel/cross-project memory contamination.
+    const sessionScope = getSessionScope();
+
     // Find ALL active sessions (modified in last 24h), sorted newest first
     let files = fs
       .readdirSync(AGENT_SESSIONS_DIR)
@@ -177,7 +182,23 @@ function readRealSessionLog() {
     if (files.length === 0) return '[NO JSONL FILES]';
 
     // Skip evolver's own sessions to avoid self-reference loops
-    const nonEvolverFiles = files.filter(f => !f.name.startsWith('evolver_hand_'));
+    let nonEvolverFiles = files.filter(f => !f.name.startsWith('evolver_hand_'));
+
+    // Session scope filter: when scope is active, only include sessions
+    // whose filename contains the scope string (e.g., channel_123456.jsonl).
+    // If no sessions match the scope, fall back to all non-evolver sessions
+    // (graceful degradation -- better to evolve with global context than not at all).
+    if (sessionScope && nonEvolverFiles.length > 0) {
+      const scopeLower = sessionScope.toLowerCase();
+      const scopedFiles = nonEvolverFiles.filter(f => f.name.toLowerCase().includes(scopeLower));
+      if (scopedFiles.length > 0) {
+        nonEvolverFiles = scopedFiles;
+        console.log(`[SessionScope] Filtered to ${scopedFiles.length} session(s) matching scope "${sessionScope}".`);
+      } else {
+        console.log(`[SessionScope] No sessions match scope "${sessionScope}". Using all ${nonEvolverFiles.length} session(s) (fallback).`);
+      }
+    }
+
     const activeFiles = nonEvolverFiles.length > 0 ? nonEvolverFiles : files.slice(0, 1);
 
     // Read from multiple active sessions (up to 6) to get a full picture
@@ -318,8 +339,23 @@ const USER_FILE = path.join(WORKSPACE_ROOT, 'USER.md');
 
 function readMemorySnippet() {
   try {
-    if (!fs.existsSync(MEMORY_FILE)) return '[MEMORY.md MISSING]';
-    const content = fs.readFileSync(MEMORY_FILE, 'utf8');
+    // Session scope isolation: when a scope is active, prefer scoped MEMORY.md
+    // at memory/scopes/<scope>/MEMORY.md. Falls back to global MEMORY.md if
+    // scoped file doesn't exist (common: scoped MEMORY.md created on first evolution).
+    const scope = getSessionScope();
+    let memFile = MEMORY_FILE;
+    if (scope) {
+      const scopedMemory = path.join(MEMORY_DIR, 'scopes', scope, 'MEMORY.md');
+      if (fs.existsSync(scopedMemory)) {
+        memFile = scopedMemory;
+        console.log(`[SessionScope] Reading scoped MEMORY.md for "${scope}".`);
+      } else {
+        // First run with scope: global MEMORY.md will be used, but note it.
+        console.log(`[SessionScope] No scoped MEMORY.md for "${scope}". Using global MEMORY.md.`);
+      }
+    }
+    if (!fs.existsSync(memFile)) return '[MEMORY.md MISSING]';
+    const content = fs.readFileSync(memFile, 'utf8');
     // Optimization: Increased limit from 2000 to 50000 for modern context windows
     return content.length > 50000
       ? content.slice(0, 50000) + `\n... [TRUNCATED: ${content.length - 50000} chars remaining]`
@@ -729,8 +765,10 @@ async function run() {
     today_log_tail: String(todayLog || '').slice(-2500),
   };
 
+  const sessionScope = getSessionScope();
   const observations = {
     agent: AGENT_NAME,
+    session_scope: sessionScope || null,
     drift_enabled: IS_RANDOM_DRIFT,
     review_mode: IS_REVIEW_MODE,
     dry_run: IS_DRY_RUN,
@@ -744,6 +782,10 @@ async function run() {
     cwd: process.cwd(),
     evidence,
   };
+
+  if (sessionScope) {
+    console.log(`[SessionScope] Active scope: "${sessionScope}". Evolution state and memory graph are isolated.`);
+  }
 
   // Memory Graph: close last action with an inferred outcome (append-only graph, mutable state).
   try {
