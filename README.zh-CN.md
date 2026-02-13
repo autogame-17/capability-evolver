@@ -248,5 +248,9 @@ MAJOR.MINOR.PATCH
 2. **稳定性优先**：如果近期错误率较高，强制进入修复模式，暂停创新功能。
 3. **环境检测**：外部集成（如 Git 同步）仅在检测到相应插件存在时才会启用。
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=autogame-17/evolver&type=Date)](https://star-history.com/#autogame-17/evolver&Date)
+
 ## 许可证
 MIT

@@ -304,6 +304,10 @@ EVOLVE_REPORT_TOOL=feishu-card
 **Method 2: Dynamic Detection**
 The script automatically detects if compatible local skills (like `skills/feishu-card`) exist in your workspace and upgrades its behavior accordingly.
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=autogame-17/evolver&type=Date)](https://star-history.com/#autogame-17/evolver&Date)
+
 ## License
 
 MIT
