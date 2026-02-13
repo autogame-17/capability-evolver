@@ -266,23 +266,36 @@ SKILL OVERLAP PREVENTION:
 
 SKILL CREATION QUALITY GATES (MANDATORY for innovate intent):
 When creating a new skill in skills/<name>/:
-1. MINIMUM FILES: Every new skill MUST contain at least:
-   - index.js or main entry file with working code
-   - SKILL.md with usage documentation
-   - package.json with name and version
-   Creating an empty directory or directory with only SKILL.md = FAILED outcome.
-2. EXPORT VERIFICATION: Every exported function must be importable.
+1. STRUCTURE: Follow the standard skill layout:
+   skills/<name>/
+   |- index.js          (required: main entry with working exports)
+   |- SKILL.md          (required: YAML frontmatter with name + description, then usage docs)
+   |- package.json      (required: name and version)
+   |- scripts/          (optional: reusable executable scripts)
+   |- references/       (optional: detailed docs loaded on demand)
+   |- assets/           (optional: templates, data files)
+   Creating an empty directory or a directory missing index.js = FAILED.
+   Do NOT create unnecessary files (README.md, CHANGELOG.md, INSTALLATION_GUIDE.md, etc.).
+2. SKILL.MD FRONTMATTER: Every SKILL.md MUST start with YAML frontmatter:
+   ---
+   name: <skill-name>
+   description: <what it does and when to use it>
+   ---
+   The description is the triggering mechanism -- include WHAT the skill does and WHEN to use it.
+3. CONCISENESS: SKILL.md body should be under 500 lines. Keep instructions lean.
+   Only include information the agent does not already know. Move detailed reference
+   material to references/ files, not into SKILL.md itself.
+4. EXPORT VERIFICATION: Every exported function must be importable.
    Run: node -e "const s = require('./skills/<name>'); console.log(Object.keys(s))"
    If this fails, the skill is broken. Fix before solidify.
-3. NO HARDCODED SECRETS: Never embed API keys, tokens, or secrets directly in code.
-   Use process.env or .env file references instead.
-   Patterns to NEVER use: hardcoded App ID, App Secret, Bearer tokens, API keys.
-   Violation = FAILED with reason "hardcoded_secret".
-4. FUNCTIONAL TEST: Before solidify, verify the skill's core function works:
+5. NO HARDCODED SECRETS: Never embed API keys, tokens, or secrets in code.
+   Use process.env or .env references. Hardcoded App ID, App Secret, Bearer tokens = FAILED.
+6. TEST BEFORE SOLIDIFY: Actually run the skill's core function to verify it works:
    node -e "require('./skills/<name>').main ? require('./skills/<name>').main() : console.log('ok')"
-5. ATOMIC CREATION: Create ALL files in a single cycle. Do not create a directory in one
-   cycle and fill it in the next -- this leads to empty directories if the second cycle fails.
-
+   Scripts in scripts/ must also be tested by executing them.
+7. ATOMIC CREATION: Create ALL files for a skill in a single cycle.
+   Do not create a directory in one cycle and fill it in the next.
+   Empty directories from failed cycles will be automatically cleaned up on rollback.
 
 CRITICAL SAFETY (SYSTEM CRASH PREVENTION):
 - NEVER delete/empty/overwrite: feishu-evolver-wrapper, feishu-common, feishu-post, feishu-card, feishu-doc, common, clawhub, git-sync, evolver.
