@@ -185,6 +185,12 @@ ADHERE TO THIS STRATEGY STRICTLY.
   // Strict Schema Injection
   const schemaSection = SCHEMA_DEFINITIONS.replace('<parent_evt_id|null>', parentValue);
 
+  // Reduce noise by filtering capabilityCandidatesPreview if too large
+  let capsPreview = capabilityCandidatesPreview || '(none)';
+  if (capsPreview.length > 5000) {
+      capsPreview = capsPreview.slice(0, 5000) + "\n...[TRUNCATED_CAPABILITIES]...";
+  }
+
   const basePrompt = `
 GEP — GENOME EVOLUTION PROTOCOL (v1.10.0 STRICT)${cycleLabel} [${nowIso}]
 
@@ -209,7 +215,8 @@ PHILOSOPHY:
 - Automate Patterns: 3+ manual occurrences = tool.
 - Innovate > Maintain: 60% innovation.
 - Robustness: Fix recurring errors permanently.
-- Safety: Never delete protected files (MEMORY.md, SOUL.md).
+- Safety: NEVER delete core skill directories or protected files. Repair, don't destroy.
+- Blast Radius: Prefer small, reversible patches. Large-scale deletions are FORBIDDEN.
 - Strictness: NO CHITCHAT. NO MARKDOWN WRAPPERS around JSON. Output RAW JSON objects separated by newlines.
 
 CONSTRAINTS:
@@ -217,6 +224,16 @@ CONSTRAINTS:
 - \`exec\` for background tasks allowed (log it).
 - New skills -> \`skills/<name>/\`.
 - Modify \`skills/evolver/\` only with rigor > 0.8.
+
+CRITICAL SAFETY (SYSTEM CRASH PREVENTION):
+- NEVER delete, empty, overwrite, or rm -rf ANY of these skill directories:
+  feishu-evolver-wrapper, feishu-common, feishu-post, feishu-card, feishu-doc,
+  common, clawhub, clawhub-batch-undelete, git-sync, evolver.
+- NEVER delete protected root files: MEMORY.md, SOUL.md, IDENTITY.md, AGENTS.md,
+  USER.md, HEARTBEAT.md, RECENT_EVENTS.md, TOOLS.md, openclaw.json, .env, package.json.
+- If a skill is broken, REPAIR it (fix the file). Do NOT delete and recreate.
+- NEVER run \`rm -rf\` on ANY directory inside skills/. Use targeted file edits only.
+- Violation of these rules triggers automatic rollback and marks the cycle as FAILED.
 
 COMMON FAILURE PATTERNS (AVOID THESE):
 - Omitted Mutation object (Must be first).
@@ -241,7 +258,7 @@ Context [Capsule Preview] (Reference for Past Success):
 ${capsulesPreview}
 
 Context [Capability Candidates]:
-${capabilityCandidatesPreview || '(none)'}
+${capsPreview}
 
 Context [Hub Matched Solution]:
 ${hubMatchedBlock || '(no hub match)'}
