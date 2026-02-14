@@ -143,7 +143,9 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
 
   // --- Defensive signals (errors, missing resources) ---
 
-  var errorHit = /\[error|error:|exception|fail|failed|iserror":true/.test(lower);
+  // Refined error detection regex to avoid false positives on "fail"/"failed" in normal text.
+  // We prioritize structured error markers ([error], error:, exception:) and specific JSON patterns.
+  var errorHit = /\[error\]|error:|exception:|iserror":true|"status":\s*"error"|"status":\s*"failed"/.test(lower);
   if (errorHit) signals.push('log_error');
 
   // Error signature (more reproducible than a coarse "log_error" tag).
@@ -247,11 +249,11 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
   }
   
   Object.keys(toolUsage).forEach(function(tool) {
-    if (toolUsage[tool] >= 5) {
+    if (toolUsage[tool] >= 10) { // Bumped threshold from 5 to 10
       signals.push('high_tool_usage:' + tool);
     }
     // Detect repeated exec usage (often a sign of manual loops or inefficient automation)
-    if (tool === 'exec' && toolUsage[tool] >= 3) {
+    if (tool === 'exec' && toolUsage[tool] >= 5) { // Bumped threshold from 3 to 5
       signals.push('repeated_tool_usage:exec');
     }
   });

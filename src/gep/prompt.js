@@ -1,5 +1,7 @@
 const { captureEnvFingerprint } = require('./envFingerprint');
 const { formatAssetPreview } = require('./assets');
+const { generateInnovationIdeas } = require('../ops/innovation'); // [2026-02-14] Innovation Catalyst Integration
+const { analyzeRecentHistory, OPPORTUNITY_SIGNALS } = require('./signals'); // [2026-02-14] Signal Analysis Integration
 
 /**
  * Build a minimal prompt for direct-reuse mode.
@@ -77,7 +79,7 @@ function truncateContext(text, maxLength = 20000) {
 
 /**
  * Strict schema definitions for the prompt to reduce drift.
- * UPDATED: 2026-02-13 (Protocol Drift Fix v3.1 - Enhanced Strictness)
+ * UPDATED: 2026-02-14 (Protocol Drift Fix v3.2 - JSON-Only Enforcement)
  */
 const SCHEMA_DEFINITIONS = `
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -86,7 +88,8 @@ I. Mandatory Evolution Object Model (Output EXACTLY these 5 objects)
 
 Output separate JSON objects. DO NOT wrap in a single array.
 DO NOT use markdown code blocks (like \`\`\`json ... \`\`\`).
-Output RAW JSON ONLY. Missing any object = PROTOCOL FAILURE.
+Output RAW JSON ONLY. No prelude, no postscript.
+Missing any object = PROTOCOL FAILURE.
 ENSURE VALID JSON SYNTAX (escape quotes in strings).
 
 0. Mutation (The Trigger) - MUST BE FIRST
@@ -114,6 +117,7 @@ ENSURE VALID JSON SYNTAX (escape quotes in strings).
 2. EvolutionEvent (The Record)
    {
      "type": "EvolutionEvent",
+     "schema_version": "1.5.0",
      "id": "evt_<timestamp>",
      "parent": <parent_evt_id|null>,
      "intent": "repair|optimize|innovate",
@@ -129,6 +133,7 @@ ENSURE VALID JSON SYNTAX (escape quotes in strings).
    - Reuse/update existing ID if possible. Create new only if novel pattern.
    {
      "type": "Gene",
+     "schema_version": "1.5.0",
      "id": "gene_<name>",
      "category": "repair|optimize|innovate",
      "signals_match": ["<pattern>"],
@@ -142,6 +147,7 @@ ENSURE VALID JSON SYNTAX (escape quotes in strings).
    - Only on success. Reference Gene used.
    {
      "type": "Capsule",
+     "schema_version": "1.5.0",
      "id": "capsule_<timestamp>",
      "trigger": ["<signal_string>"],
      "gene": "<gene_id>",
@@ -165,6 +171,7 @@ function buildGepPrompt({
   externalCandidatesPreview,
   hubMatchedBlock,
   cycleId,
+  recentHistory, // [2026-02-14] Pass recent history
 }) {
   const parentValue = parentEventId ? `"${parentEventId}"` : 'null';
   const selectedGeneId = selectedGene && selectedGene.id ? selectedGene.id : 'gene_<name>';
@@ -192,7 +199,7 @@ ACTIVE STRATEGY (Generic):
   }
   
   // Use intelligent truncation
-  const executionContext = truncateContext(context, 15000);
+  const executionContext = truncateContext(context, 20000);
   
   // Strict Schema Injection
   const schemaSection = SCHEMA_DEFINITIONS.replace('<parent_evt_id|null>', parentValue);
@@ -200,24 +207,73 @@ ACTIVE STRATEGY (Generic):
   // Reduce noise by filtering capabilityCandidatesPreview if too large
   // If a gene is selected, we need less noise from capabilities
   let capsPreview = capabilityCandidatesPreview || '(none)';
-  const capsLimit = selectedGene ? 1000 : 2000;
+  const capsLimit = selectedGene ? 500 : 2000;
   if (capsPreview.length > capsLimit) {
       capsPreview = capsPreview.slice(0, capsLimit) + "\n...[TRUNCATED_CAPABILITIES]...";
   }
 
-  // Optimize signals display: truncate long signals to prevent context flooding
-  const optimizedSignals = (signals || []).map(s => {
-    if (typeof s === 'string' && s.length > 300) {
-      return s.slice(0, 300) + '...[TRUNCATED_SIGNAL]';
+  // Optimize signals display: truncate long signals and limit count
+  const uniqueSignals = Array.from(new Set(signals || []));
+  const optimizedSignals = uniqueSignals.slice(0, 50).map(s => {
+    if (typeof s === 'string' && s.length > 200) {
+      return s.slice(0, 200) + '...[TRUNCATED_SIGNAL]';
     }
     return s;
   });
+  if (uniqueSignals.length > 50) {
+      optimizedSignals.push(`...[TRUNCATED ${uniqueSignals.length - 50} SIGNALS]...`);
+  }
 
   const formattedGenes = formatAssetPreview(genesPreview);
   const formattedCapsules = formatAssetPreview(capsulesPreview);
   
+  // [2026-02-14] Innovation Catalyst Integration
+  // If stagnation is detected, inject concrete innovation ideas into the prompt.
+  let innovationBlock = '';
+  const stagnationSignals = [
+      'evolution_stagnation_detected', 
+      'stable_success_plateau', 
+      'repair_loop_detected',
+      'force_innovation_after_repair_loop',
+      'empty_cycle_loop_detected',
+      'evolution_saturation'
+  ];
+  if (uniqueSignals.some(s => stagnationSignals.includes(s))) {
+      const ideas = generateInnovationIdeas();
+      if (ideas && ideas.length > 0) {
+          innovationBlock = `
+Context [Innovation Catalyst] (Stagnation Detected - Consider These Ideas):
+${ideas.join('\n')}
+`;
+      }
+  }
+
+  // [2026-02-14] Strict Stagnation Directive
+  // If uniqueSignals contains 'evolution_stagnation_detected' or 'stable_success_plateau',
+  // inject a MANDATORY directive to force innovation and forbid repair/optimize if not strictly necessary.
+  if (uniqueSignals.includes('evolution_stagnation_detected') || uniqueSignals.includes('stable_success_plateau')) {
+      const stagnationDirective = `
+*** CRITICAL STAGNATION DIRECTIVE ***
+System has detected stagnation (repetitive cycles or lack of progress).
+You MUST choose INTENT: INNOVATE.
+You MUST NOT choose repair or optimize unless there is a critical blocking error (log_error).
+Prefer implementing one of the Innovation Catalyst ideas above.
+`;
+      innovationBlock += stagnationDirective;
+  }
+
+  // [2026-02-14] Recent History Integration
+  let historyBlock = '';
+  if (recentHistory && recentHistory.length > 0) {
+      historyBlock = `
+Recent Evolution History (last 8 cycles -- DO NOT repeat the same intent+signal+gene):
+${recentHistory.map((h, i) => `  ${i + 1}. [${h.intent}] signals=[${h.signals.slice(0, 2).join(', ')}] gene=${h.gene_id} outcome=${h.outcome.status} @${h.timestamp}`).join('\n')}
+IMPORTANT: If you see 3+ consecutive "repair" cycles with the same gene, you MUST switch to "innovate" intent.
+`.trim();
+  }
+
   // Refactor prompt assembly to minimize token usage and maximize clarity
-  // UPDATED: 2026-02-13 (Optimized Asset Embedding & Strict Schema v2.2 - Signal Truncation)
+  // UPDATED: 2026-02-14 (Optimized Asset Embedding & Strict Schema v2.5 - JSON-Only Hardening)
   const basePrompt = `
 GEP — GENOME EVOLUTION PROTOCOL (v1.10.3 STRICT)${cycleLabel} [${nowIso}]
 
@@ -250,6 +306,7 @@ PHILOSOPHY:
   * Repair: fix ONLY broken files. Do NOT reinstall/bulk-copy.
   * Prefer targeted edits.
 - Strictness: NO CHITCHAT. NO MARKDOWN WRAPPERS around JSON. Output RAW JSON objects separated by newlines.
+- NO "Here is the plan" or conversational filler. START IMMEDIATELY WITH JSON.
 
 CONSTRAINTS:
 - No \`exec\` for messaging (use feishu-post/card).
@@ -311,6 +368,7 @@ COMMON FAILURE PATTERNS:
 - "id": "mut_undefined".
 - Missing "trigger_signals".
 - Unrunnable validation steps.
+- Markdown code blocks wrapping JSON (FORBIDDEN).
 
 FAILURE STREAK AWARENESS:
 - If "consecutive_failure_streak_N" or "failure_loop_detected":
@@ -319,12 +377,17 @@ FAILURE STREAK AWARENESS:
   3. Respect "ban_gene:<id>".
 
 Final Directive: Every cycle must leave the system measurably better.
+START IMMEDIATELY WITH RAW JSON (Mutation Object first).
+DO NOT WRITE ANY INTRODUCTORY TEXT.
 
 Context [Signals]:
 ${JSON.stringify(optimizedSignals)}
 
 Context [Env Fingerprint]:
 ${JSON.stringify(envFingerprint, null, 2)}
+${innovationBlock}
+Context [Injection Hint]:
+${process.env.EVOLVE_HINT ? process.env.EVOLVE_HINT : '(none)'}
 
 Context [Gene Preview] (Reference for Strategy):
 ${formattedGenes}
@@ -340,6 +403,8 @@ ${hubMatchedBlock || '(no hub match)'}
 
 Context [External Candidates]:
 ${externalCandidatesPreview || '(none)'}
+
+${historyBlock}
 
 Context [Execution]:
 ${executionContext}
@@ -381,7 +446,10 @@ Rules:
   if (executionContextIndex > -1) {
       const prefix = basePrompt.slice(0, executionContextIndex + 20);
       const currentExecution = basePrompt.slice(executionContextIndex + 20);
-      const allowedExecutionLength = Math.max(0, maxChars - prefix.length - 100);
+      // Hard cap the execution context length to avoid token limit errors even if MAX_CHARS is high.
+      // 20000 chars is roughly 5k tokens, which is safe for most models alongside the rest of the prompt.
+      const EXEC_CONTEXT_CAP = 20000;
+      const allowedExecutionLength = Math.min(EXEC_CONTEXT_CAP, Math.max(0, maxChars - prefix.length - 100));
       return prefix + "\n" + currentExecution.slice(0, allowedExecutionLength) + "\n...[TRUNCATED]...";
   }
 

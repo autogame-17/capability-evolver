@@ -296,13 +296,14 @@ function checkConstraints({ gene, blast, blastRadiusEstimate, repoRoot }) {
     if (isForbiddenPath(f, forbidden)) violations.push(`forbidden_path touched: ${f}`);
   }
 
-  // --- Critical protection: reject any evolution that deletes/empties core dependencies ---
+  // --- Critical protection: block ALL modifications to critical paths ---
+  // These paths (evolver, wrapper, feishu-common, etc.) must only be changed
+  // through the human-reviewed release pipeline, never by evolution cycles.
+  // No intent exception -- repair/optimize/innovate all blocked equally.
   for (const f of blast.all_changed_files || blast.changed_files || []) {
     if (isCriticalProtectedPath(f)) {
       const norm = normalizeRelPath(f);
-      if (norm.startsWith('skills/evolver/') && gene.category !== 'repair') {
-        violations.push(`critical_path_modified_without_repair_intent: ${norm}`);
-      }
+      violations.push(`critical_path_modified: ${norm}`);
     }
   }
 

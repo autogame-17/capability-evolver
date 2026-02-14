@@ -40,12 +40,25 @@ function repair(gitRoot) {
         } catch (e) {}
     }
 
-    // 4. Fetch origin (safe, read-only)
-    try {
-        execSync('git fetch origin', { cwd: root, stdio: 'ignore', timeout: 30000 });
-        repaired.push('fetch_ok');
-    } catch (e) {
-        console.warn('[SelfRepair] git fetch failed: ' + e.message);
+    // 4. Reset to remote main if local is corrupt (last resort - guarded by flag)
+    // Only enabled if explicitly called with --force-reset or EVOLVE_GIT_RESET=true
+    if (process.env.EVOLVE_GIT_RESET === 'true') {
+        try {
+            console.log('[SelfRepair] Resetting local branch to origin/main (HARD reset)...');
+            execSync('git fetch origin main', { cwd: root, stdio: 'ignore' });
+            execSync('git reset --hard origin/main', { cwd: root, stdio: 'ignore' });
+            repaired.push('hard_reset_to_origin');
+        } catch (e) {
+            console.warn('[SelfRepair] Hard reset failed: ' + e.message);
+        }
+    } else {
+        // Safe fetch
+        try {
+            execSync('git fetch origin', { cwd: root, stdio: 'ignore', timeout: 30000 });
+            repaired.push('fetch_ok');
+        } catch (e) {
+            console.warn('[SelfRepair] git fetch failed: ' + e.message);
+        }
     }
 
     return repaired;
