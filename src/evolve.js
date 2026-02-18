@@ -1198,6 +1198,7 @@ async function run() {
         source_type: hubHit && hubHit.hit ? 'reused' : 'generated',
         reused_asset_id: hubHit && hubHit.hit ? (hubHit.asset_id || null) : null,
         reused_source_node: hubHit && hubHit.hit ? (hubHit.source_node_id || null) : null,
+        reused_chain_id: hubHit && hubHit.hit ? (hubHit.chain_id || null) : null,
         baseline_untracked: baselineUntracked,
         baseline_git_head: baselineHead,
         blast_radius_estimate: blastRadiusEstimate,

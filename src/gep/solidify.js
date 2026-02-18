@@ -941,6 +941,7 @@ function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } 
 
   const sourceType = lastRun && lastRun.source_type ? String(lastRun.source_type) : 'generated';
   const reusedAssetId = lastRun && lastRun.reused_asset_id ? String(lastRun.reused_asset_id) : null;
+  const reusedChainId = lastRun && lastRun.reused_chain_id ? String(lastRun.reused_chain_id) : null;
 
   const event = {
     type: 'EvolutionEvent',
@@ -1110,10 +1111,13 @@ function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } 
           var sanitizedEvent = (event && event.type === 'EvolutionEvent') ? sanitizePayload(event) : null;
           if (sanitizedEvent) sanitizedEvent.asset_id = computeAssetId(sanitizedEvent);
 
+          var publishChainId = reusedChainId || null;
+
           var msg = buildPublishBundle({
             gene: publishGene,
             capsule: sanitizedCapsule,
             event: sanitizedEvent,
+            chainId: publishChainId,
           });
           var result = httpTransportSend(msg, { hubUrl });
           // httpTransportSend returns a Promise

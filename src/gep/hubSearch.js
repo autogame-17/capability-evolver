@@ -114,6 +114,7 @@ async function hubSearch(signals, opts) {
       mode: pick.mode,
       asset_id: pick.match.asset_id || null,
       source_node_id: pick.match.source_node_id || null,
+      chain_id: pick.match.chain_id || null,
     };
   } catch (err) {
     // Hub unreachable is non-fatal; fall through to normal evolve

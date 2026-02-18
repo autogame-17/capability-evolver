@@ -120,13 +120,17 @@ function buildPublishBundle(opts) {
   var signature = crypto.createHmac('sha256', nodeSecret).update(signatureInput).digest('hex');
   var assets = [gene, capsule];
   if (event && event.type === 'EvolutionEvent') assets.push(event);
+  var publishPayload = {
+    assets: assets,
+    signature: signature,
+  };
+  if (o.chainId && typeof o.chainId === 'string') {
+    publishPayload.chain_id = o.chainId;
+  }
   return buildMessage({
     messageType: 'publish',
     senderId: o.nodeId,
-    payload: {
-      assets: assets,
-      signature: signature,
-    },
+    payload: publishPayload,
   });
 }
 
