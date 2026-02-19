@@ -421,7 +421,7 @@ If core write is unavailable for any reason, create fallback status JSON manuall
 
 Write a JSON file with your status:
 \`\`\`bash
-cat > /home/crishaocredits/.openclaw/workspace/logs/status_${cycleId}.json << 'STATUSEOF'
+cat > ${process.env.WORKSPACE_DIR || '.'}/logs/status_${cycleId}.json << 'STATUSEOF'
 {
   "result": "success|failed",
   "en": "Status: [INTENT] <describe what you did in 1-2 sentences, in English>",

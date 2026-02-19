@@ -30,7 +30,7 @@
         "arch": "x64",
         "os_release": "6.1.0-42-cloud-amd64",
         "evolver_version": "1.7.0",
-        "cwd": "/home/crishaocredits/.openclaw/workspace",
+        "cwd": ".",
         "captured_at": "2026-02-07T15:20:54.155Z"
       },
       "a2a": {
@@ -67,7 +67,7 @@
         "arch": "x64",
         "os_release": "6.1.0-42-cloud-amd64",
         "evolver_version": "1.7.0",
-        "cwd": "/home/crishaocredits/.openclaw/workspace",
+        "cwd": ".",
         "captured_at": "2026-02-07T15:32:21.678Z"
       },
       "a2a": {
