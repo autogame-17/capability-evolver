@@ -29,6 +29,7 @@ const {
 } = memoryAdapter;
 const { readStateForSolidify, writeStateForSolidify } = require('./gep/solidify');
 const { fetchTasks, selectBestTask, claimTask, taskToSignals } = require('./gep/taskReceiver');
+const { generateQuestions } = require('./gep/questionGenerator');
 const { buildMutation, isHighRiskMutationAllowed } = require('./gep/mutation');
 const { selectPersonalityForRun } = require('./gep/personality');
 const { clip, writePromptArtifact, renderSessionsSpawnCall } = require('./gep/bridge');
@@ -852,12 +853,40 @@ async function run() {
     recentEvents,
   });
 
-  // --- Hub Task Auto-Claim ---
-  // Fetch available tasks from Hub, pick the best one, auto-claim it,
-  // and inject its signals so the evolution cycle focuses on it.
+  // --- Hub Task Auto-Claim (with proactive questions) ---
+  // Generate questions from current context, piggyback them on the fetch call,
+  // then pick the best task and auto-claim it.
   let activeTask = null;
+  let proactiveQuestions = [];
   try {
-    const hubTasks = await fetchTasks();
+    proactiveQuestions = generateQuestions({
+      signals,
+      recentEvents,
+      sessionTranscript: recentMasterLog,
+      memorySnippet: memorySnippet,
+    });
+    if (proactiveQuestions.length > 0) {
+      console.log(`[QuestionGenerator] Generated ${proactiveQuestions.length} proactive question(s).`);
+    }
+  } catch (e) {
+    console.log(`[QuestionGenerator] Generation failed (non-fatal): ${e.message}`);
+  }
+
+  try {
+    const fetchResult = await fetchTasks({ questions: proactiveQuestions });
+    const hubTasks = fetchResult.tasks || [];
+
+    if (fetchResult.questions_created && fetchResult.questions_created.length > 0) {
+      const created = fetchResult.questions_created.filter(function(q) { return !q.error; });
+      const failed = fetchResult.questions_created.filter(function(q) { return q.error; });
+      if (created.length > 0) {
+        console.log(`[QuestionGenerator] Hub accepted ${created.length} question(s) as bounties.`);
+      }
+      if (failed.length > 0) {
+        console.log(`[QuestionGenerator] Hub rejected ${failed.length} question(s): ${failed.map(function(q) { return q.error; }).join(', ')}`);
+      }
+    }
+
     if (hubTasks.length > 0) {
       const best = selectBestTask(hubTasks);
       if (best) {
@@ -866,7 +895,6 @@ async function run() {
         if (claimed) {
           activeTask = best;
           const taskSignals = taskToSignals(best);
-          // Prepend task signals (high priority) so selector picks relevant genes
           for (const sig of taskSignals) {
             if (!signals.includes(sig)) signals.unshift(sig);
           }
@@ -1137,6 +1165,7 @@ async function run() {
   try {
     const runId = `run_${Date.now()}`;
     const parentEventId = getLastEventId();
+    const selectedBy = memoryAdvice && memoryAdvice.preferredGeneId ? 'memory_graph+selector' : 'selector';
 
     // Baseline snapshot (before any edits).
     let baselineUntracked = [];

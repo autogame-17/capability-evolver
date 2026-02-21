@@ -9,13 +9,27 @@ const HUB_URL = process.env.A2A_HUB_URL || process.env.EVOMAP_HUB_URL || 'https:
 
 /**
  * Fetch available tasks from Hub via the A2A fetch endpoint.
- * @returns {Array} Array of task objects, or empty array on failure.
+ * Optionally piggybacks proactive questions in the payload for Hub to create bounties.
+ *
+ * @param {object} [opts]
+ * @param {Array<{ question: string, amount?: number, signals?: string[] }>} [opts.questions]
+ * @returns {{ tasks: Array, questions_created?: Array }}
  */
-async function fetchTasks() {
+async function fetchTasks(opts) {
+  const o = opts || {};
   const nodeId = getNodeId();
-  if (!nodeId) return [];
+  if (!nodeId) return { tasks: [] };
 
   try {
+    const payload = {
+      asset_type: null,
+      include_tasks: true,
+    };
+
+    if (Array.isArray(o.questions) && o.questions.length > 0) {
+      payload.questions = o.questions;
+    }
+
     const msg = {
       protocol: 'gep-a2a',
       protocol_version: '1.0.0',
@@ -23,10 +37,7 @@ async function fetchTasks() {
       message_id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       sender_id: nodeId,
       timestamp: new Date().toISOString(),
-      payload: {
-        asset_type: null,
-        include_tasks: true,
-      },
+      payload,
     };
 
     const url = `${HUB_URL.replace(/\/+$/, '')}/a2a/fetch`;
@@ -41,13 +52,20 @@ async function fetchTasks() {
     });
     clearTimeout(timer);
 
-    if (!res.ok) return [];
+    if (!res.ok) return { tasks: [] };
 
     const data = await res.json();
-    const payload = data.payload || data;
-    return Array.isArray(payload.tasks) ? payload.tasks : [];
+    const respPayload = data.payload || data;
+    const tasks = Array.isArray(respPayload.tasks) ? respPayload.tasks : [];
+    const result = { tasks };
+
+    if (respPayload.questions_created) {
+      result.questions_created = respPayload.questions_created;
+    }
+
+    return result;
   } catch {
-    return [];
+    return { tasks: [] };
   }
 }
 
