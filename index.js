@@ -2,7 +2,7 @@ const evolve = require('./src/evolve');
 const { solidify } = require('./src/gep/solidify');
 const path = require('path');
 // Hardened Env Loading: Ensure .env is loaded before anything else
-try { require('dotenv').config({ path: path.resolve(__dirname, '../../.env') }); } catch (e) { console.warn('[Evolver] Warning: dotenv not found or failed to load .env'); }
+try { require('dotenv').config({ path: path.resolve(__dirname, './.env') }); } catch (e) { console.warn('[Evolver] Warning: dotenv not found or failed to load .env'); }
 const fs = require('fs');
 const { spawn } = require('child_process');
 
