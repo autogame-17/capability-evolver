@@ -60,7 +60,7 @@ function stableHash(input) {
 function runCmd(cmd, opts = {}) {
   const cwd = opts.cwd || getRepoRoot();
   const timeoutMs = Number.isFinite(Number(opts.timeoutMs)) ? Number(opts.timeoutMs) : 120000;
-  return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs });
+  return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs, windowsHide: true });
 }
 
 function tryRunCmd(cmd, opts = {}) {

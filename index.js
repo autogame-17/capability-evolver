@@ -149,11 +149,13 @@ async function main() {
             if (cycleCount >= maxCyclesPerProcess || memMb > maxRssMb) {
               console.log(`[Daemon] Restarting self (cycles=${cycleCount}, rssMb=${memMb.toFixed(0)})`);
               releaseLock(); // Release before spawning to allow child to acquire
-              const child = spawn(process.execPath, [__filename, ...args], {
+              const spawnOpts = {
                 detached: true,
                 stdio: 'ignore',
                 env: process.env,
-              });
+                windowsHide: true,
+              };
+              const child = spawn(process.execPath, [__filename, ...args], spawnOpts);
               child.unref();
               process.exit(0);
             }

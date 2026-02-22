@@ -270,22 +270,31 @@ function checkSystemHealth() {
   } catch (e) {}
 
   try {
-    // Process count: Attempt pgrep first (faster), fallback to ps
-    try {
-      const pgrep = execSync('pgrep -c node', {
+    if (process.platform === 'win32') {
+      const wmic = execSync('tasklist /FI "IMAGENAME eq node.exe" /NH', {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: 2000,
+        timeout: 3000,
+        windowsHide: true,
       });
-      report.push(`Node Processes: ${pgrep.trim()}`);
-    } catch (e) {
-      // Fallback to ps if pgrep fails/missing
-      const ps = execSync('ps aux | grep node | grep -v grep | wc -l', {
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-        timeout: 2000,
-      });
-      report.push(`Node Processes: ${ps.trim()}`);
+      const count = wmic.split('\n').filter(l => l.trim() && !l.includes('INFO:')).length;
+      report.push(`Node Processes: ${count}`);
+    } else {
+      try {
+        const pgrep = execSync('pgrep -c node', {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 2000,
+        });
+        report.push(`Node Processes: ${pgrep.trim()}`);
+      } catch (e) {
+        const ps = execSync('ps aux | grep node | grep -v grep | wc -l', {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'ignore'],
+          timeout: 2000,
+        });
+        report.push(`Node Processes: ${ps.trim()}`);
+      }
     }
   } catch (e) {}
 
@@ -301,6 +310,7 @@ function checkSystemHealth() {
           encoding: 'utf8',
           stdio: ['ignore', 'pipe', 'ignore'],
           timeout: 2000,
+          windowsHide: true,
         });
         if (status.trim()) issues.push(status.trim());
       } catch (e) {}
@@ -485,13 +495,13 @@ function checkAndAutoUpdate() {
       }
     } catch (_) {}
 
-    // Find clawhub binary
     let clawhubBin = null;
+    const whichCmd = process.platform === 'win32' ? 'where clawhub' : 'which clawhub';
     const candidates = ['clawhub', path.join(os.homedir(), '.npm-global/bin/clawhub'), '/usr/local/bin/clawhub'];
     for (const c of candidates) {
       try {
         if (c === 'clawhub') {
-          execSync('which clawhub', { stdio: 'ignore', timeout: 3000 });
+          execSync(whichCmd, { stdio: 'ignore', timeout: 3000, windowsHide: true });
           clawhubBin = 'clawhub';
           break;
         }
@@ -510,6 +520,7 @@ function checkAndAutoUpdate() {
           stdio: ['ignore', 'pipe', 'pipe'],
           timeout: 30000,
           cwd: path.resolve(REPO_ROOT, '..'),
+          windowsHide: true,
         });
         if (out && !out.includes('already up to date') && !out.includes('not installed')) {
           console.log(`[AutoUpdate] ${slug}: ${out.trim().split('\n').pop()}`);
@@ -577,17 +588,19 @@ async function run() {
   // SAFEGUARD: If another evolver Hand Agent is already running, back off.
   // Prevents race conditions when a wrapper restarts while the old Hand Agent
   // is still executing. The Core yields instead of starting a competing cycle.
-  try {
-    const _psRace = require('child_process').execSync(
-      'ps aux | grep "evolver_hand_" | grep "openclaw.*agent" | grep -v grep',
-      { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
-    ).trim();
-    if (_psRace && _psRace.length > 0) {
-      console.log('[Evolver] Another evolver Hand Agent is already running. Yielding this cycle.');
-      return;
+  if (process.platform !== 'win32') {
+    try {
+      const _psRace = require('child_process').execSync(
+        'ps aux | grep "evolver_hand_" | grep "openclaw.*agent" | grep -v grep',
+        { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
+      ).trim();
+      if (_psRace && _psRace.length > 0) {
+        console.log('[Evolver] Another evolver Hand Agent is already running. Yielding this cycle.');
+        return;
+      }
+    } catch (_) {
+      // grep exit 1 = no match = no conflict, safe to proceed
     }
-  } catch (_) {
-    // grep exit 1 = no match = no conflict, safe to proceed
   }
 
   // SAFEGUARD: If the agent has too many active user sessions, back off.
@@ -1180,6 +1193,7 @@ async function run() {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
         timeout: 4000,
+        windowsHide: true,
       });
       baselineUntracked = String(out)
         .split('\n')
@@ -1193,6 +1207,7 @@ async function run() {
         encoding: 'utf8',
         stdio: ['ignore', 'pipe', 'ignore'],
         timeout: 4000,
+        windowsHide: true,
       });
       baselineHead = String(out || '').trim() || null;
     } catch (e) {}
