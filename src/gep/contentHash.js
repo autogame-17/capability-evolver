@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 // Schema version for all GEP asset types.
 // Bump MINOR for additive fields; MAJOR for breaking changes.
-const SCHEMA_VERSION = '1.5.0';
+const SCHEMA_VERSION = '1.6.0';
 
 // Canonical JSON: deterministic serialization with sorted keys at all levels.
 // Arrays preserve order; non-finite numbers become null; undefined becomes null.

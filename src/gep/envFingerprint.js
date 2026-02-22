@@ -14,11 +14,15 @@ const { getDeviceId, isContainer } = require('./deviceId');
 function captureEnvFingerprint() {
   const repoRoot = getRepoRoot();
   let pkgVersion = null;
+  let pkgName = null;
   try {
     const raw = fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8');
     const pkg = JSON.parse(raw);
     pkgVersion = pkg && pkg.version ? String(pkg.version) : null;
+    pkgName = pkg && pkg.name ? String(pkg.name) : null;
   } catch (e) {}
+
+  const region = (process.env.EVOLVER_REGION || '').trim().toLowerCase().slice(0, 5) || undefined;
 
   return {
     device_id: getDeviceId(),
@@ -28,6 +32,9 @@ function captureEnvFingerprint() {
     os_release: os.release(),
     hostname: crypto.createHash('sha256').update(os.hostname()).digest('hex').slice(0, 12),
     evolver_version: pkgVersion,
+    client: pkgName || 'evolver',
+    client_version: pkgVersion,
+    region: region,
     cwd: process.cwd(),
     container: isContainer(),
   };
@@ -43,7 +50,8 @@ function envFingerprintKey(fp) {
     fp.platform || '',
     fp.arch || '',
     fp.hostname || '',
-    fp.evolver_version || '',
+    fp.client || fp.evolver_version || '',
+    fp.client_version || fp.evolver_version || '',
   ].join('|');
   return crypto.createHash('sha256').update(parts, 'utf8').digest('hex').slice(0, 16);
 }
