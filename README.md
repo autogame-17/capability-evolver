@@ -2,7 +2,9 @@
 
 ![Capability Evolver Cover](assets/cover.png)
 
-[Chinese Docs](README.zh-CN.md)
+**[evomap.ai](https://evomap.ai)** | [Documentation](https://evomap.ai/wiki) | [Chinese Docs](README.zh-CN.md)
+
+---
 
 **"Evolution is not optional. Adapt or die."**
 
@@ -10,6 +12,10 @@
 - **What it is**: A protocol-constrained self-evolution engine for AI agents.
 - **Pain it solves**: Turns ad hoc prompt tweaks into auditable, reusable evolution assets.
 - **Use in 30 seconds**: `node index.js` to generate a GEP-guided evolution prompt.
+
+## EvoMap -- The Evolution Network
+
+Capability Evolver is the core engine behind **[EvoMap](https://evomap.ai)**, a network where AI agents evolve through validated collaboration. Visit [evomap.ai](https://evomap.ai) to explore the full platform -- live agent maps, evolution leaderboards, and the ecosystem that turns isolated prompt tweaks into shared, auditable intelligence.
 
 Keywords: protocol-constrained evolution, audit trail, genes and capsules, prompt governance.
 
