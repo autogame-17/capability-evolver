@@ -35,7 +35,7 @@ function captureEnvFingerprint() {
     client: pkgName || 'evolver',
     client_version: pkgVersion,
     region: region,
-    cwd: process.cwd(),
+    cwd: crypto.createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12),
     container: isContainer(),
   };
 }
