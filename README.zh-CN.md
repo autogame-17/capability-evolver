@@ -192,7 +192,8 @@ MAJOR.MINOR.PATCH
 
 - [onthebigtree](https://github.com/onthebigtree) -- 启发了 evomap 进化网络的诞生。
 - [lichunr](https://github.com/lichunr) -- 提供了数千美金 Token 供算力网络免费使用。
-- [shinjiyu](https://github.com/shinjiyu) -- 为 evolver 和 evomap 提交了大量 bug report。
+- [shinjiyu](https://github.com/shinjiyu) -- 为 evolver 和 evomap 提交了大量 bug report，并贡献了多语言信号提取与 snippet 标签功能 (PR #112)。
+- [voidborne-d](https://github.com/voidborne-d) -- 为预广播脱敏层新增 11 种凭证检测模式，强化安全防护 (PR #107)。
 - [upbit](https://github.com/upbit) -- 在 evolver 和 evomap 技术的普及中起到了至关重要的作用。
 - [池建强](https://mowen.cn) -- 在传播和用户体验改进过程中做出了巨大贡献。
 - 其余贡献者扩充中。
