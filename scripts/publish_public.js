@@ -348,6 +348,51 @@ async function ensureReleaseWithApi({ repo, tag, title, notes, notesFile, dryRun
   process.stdout.write(`Created GitHub Release for tag ${tag}\n`);
 }
 
+// Collect unique external contributors from private repo commits since the last release.
+// Returns an array of "Name <email>" strings suitable for Co-authored-by trailers.
+// GitHub counts Co-authored-by toward the Contributors graph.
+function getContributorsSinceLastRelease() {
+  const EXCLUDED = new Set([
+    'evolver-publish@local',
+    'evolver@local',
+    'openclaw@users.noreply.github.com',
+  ]);
+
+  try {
+    let baseCommit = '';
+    try {
+      baseCommit = execSync(
+        'git log -n 1 --pretty=%H --grep="chore(release): prepare v"',
+        { encoding: 'utf8', cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] }
+      ).trim();
+    } catch (_) {}
+
+    const range = baseCommit ? `${baseCommit}..HEAD` : '-30';
+    const raw = execSync(
+      `git log ${range} --pretty="%aN <%aE>"`,
+      { encoding: 'utf8', cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] }
+    ).trim();
+
+    if (!raw) return [];
+
+    const seen = new Set();
+    const contributors = [];
+    for (const line of raw.split('\n')) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const emailMatch = trimmed.match(/<([^>]+)>/);
+      const email = emailMatch ? emailMatch[1].toLowerCase() : '';
+      if (EXCLUDED.has(email)) continue;
+      if (seen.has(email)) continue;
+      seen.add(email);
+      contributors.push(trimmed);
+    }
+    return contributors;
+  } catch (_) {
+    return [];
+  }
+}
+
 function main() {
   const dryRun = String(process.env.DRY_RUN || '').toLowerCase() === 'true';
 
@@ -461,12 +506,15 @@ function main() {
       if (!dryRun && !pending) {
         process.stdout.write('Public repo already matches build output. Skipping commit/push.\n');
       } else {
-        // Avoid relying on global git config (CI environments often lack user.name/user.email).
+        const contributors = getContributorsSinceLastRelease();
+        let commitMsg = msg.replace(/"/g, '\\"');
+        if (contributors.length > 0) {
+          const trailers = contributors.map(c => `Co-authored-by: ${c}`).join('\n');
+          commitMsg += `\\n\\n${trailers.replace(/"/g, '\\"')}`;
+          process.stdout.write(`Including ${contributors.length} contributor(s) in publish commit.\n`);
+        }
         run(
-          `git -C "${tmpRepoDir}" -c user.name="evolver-publish" -c user.email="evolver-publish@local" commit -m "${msg.replace(
-            /"/g,
-            '\\"'
-          )}"`,
+          `git -C "${tmpRepoDir}" -c user.name="evolver-publish" -c user.email="evolver-publish@local" commit -m "${commitMsg}"`,
           { dryRun }
         );
         run(`git -C "${tmpRepoDir}" push origin ${publicBranch}`, { dryRun });

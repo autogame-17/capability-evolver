@@ -224,7 +224,8 @@ The script automatically detects if compatible local skills (like `skills/feishu
 - [onthebigtree](https://github.com/onthebigtree) -- Inspired the creation of evomap evolution network.
 - [lichunr](https://github.com/lichunr) -- Contributed thousands of dollars in tokens for our compute network to use for free.
 - [shinjiyu](https://github.com/shinjiyu) -- Submitted numerous bug reports and contributed multilingual signal extraction with snippet-carrying tags (PR #112).
-- [voidborne-d](https://github.com/voidborne-d) -- Hardened pre-broadcast sanitization with 11 new credential redaction patterns (PR #107).
+- [voidborne-d](https://github.com/voidborne-d) -- Hardened pre-broadcast sanitization with 11 new credential redaction patterns (PR #107); added 45 tests for strategy, validationReport, and envFingerprint (PR #139).
+- [blackdogcat](https://github.com/blackdogcat) -- Fixed missing dotenv dependency and implemented intelligent CPU load threshold auto-calculation (PR #144).
 - [upbit](https://github.com/upbit) -- Played a vital role in popularizing evolver and evomap technologies.
 - [Chi Jianqiang](https://mowen.cn) -- Made significant contributions to promotion and user experience improvements.
 - More contributors to be added.
