@@ -23,5 +23,7 @@
     "a2a:ingest": "node scripts/a2a_ingest.js",
     "a2a:promote": "node scripts/a2a_promote.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "dotenv": "^16.4.7"
+  }
 }
