@@ -1008,7 +1008,12 @@ async function run() {
     }
 
     if (hubTasks.length > 0) {
-      const best = selectBestTask(hubTasks);
+      let taskMemoryEvents = [];
+      try {
+        const { tryReadMemoryGraphEvents } = require('./gep/memoryGraph');
+        taskMemoryEvents = tryReadMemoryGraphEvents(1000);
+      } catch {}
+      const best = selectBestTask(hubTasks, taskMemoryEvents);
       if (best) {
         const alreadyClaimed = best.status === 'claimed';
         const claimed = alreadyClaimed || await claimTask(best.id || best.task_id);

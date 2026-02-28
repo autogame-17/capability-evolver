@@ -1,11 +1,24 @@
 // ---------------------------------------------------------------------------
 // taskReceiver -- pulls external tasks from Hub, auto-claims, and injects
 // them as high-priority signals into the evolution loop.
+//
+// v2: Smart task selection with difficulty-aware ROI scoring and capability
+//     matching via memory graph history.
 // ---------------------------------------------------------------------------
 
 const { getNodeId } = require('./a2aProtocol');
 
 const HUB_URL = process.env.A2A_HUB_URL || process.env.EVOMAP_HUB_URL || 'https://evomap.ai';
+
+const TASK_STRATEGY = String(process.env.TASK_STRATEGY || 'balanced').toLowerCase();
+const TASK_MIN_CAPABILITY_MATCH = Number(process.env.TASK_MIN_CAPABILITY_MATCH) || 0.1;
+
+// Scoring weights by strategy
+const STRATEGY_WEIGHTS = {
+  greedy:       { roi: 0.10, capability: 0.05, completion: 0.05, bounty: 0.80 },
+  balanced:     { roi: 0.35, capability: 0.30, completion: 0.20, bounty: 0.15 },
+  conservative: { roi: 0.25, capability: 0.45, completion: 0.25, bounty: 0.05 },
+};
 
 /**
  * Fetch available tasks from Hub via the A2A fetch endpoint.
@@ -74,38 +87,199 @@ async function fetchTasks(opts) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Capability matching: how well this agent's history matches a task's signals
+// ---------------------------------------------------------------------------
+
+function parseSignals(raw) {
+  if (!raw) return [];
+  return String(raw).split(',').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+}
+
+function jaccard(a, b) {
+  if (!a.length || !b.length) return 0;
+  var setA = new Set(a);
+  var setB = new Set(b);
+  var inter = 0;
+  for (var v of setB) { if (setA.has(v)) inter++; }
+  return inter / (setA.size + setB.size - inter);
+}
+
 /**
- * Pick the best task from a list. Priority:
- *   1. Bounty tasks (higher amount first)
- *   2. Tasks already claimed by this node
- *   3. Open tasks (newest first)
+ * Estimate how well this agent can handle a task based on memory graph history.
+ * Returns 0.0 - 1.0 where 1.0 = strong match with high success rate.
+ *
+ * @param {object} task - task from Hub (has .signals field)
+ * @param {Array} memoryEvents - from tryReadMemoryGraphEvents()
+ * @returns {number}
+ */
+function estimateCapabilityMatch(task, memoryEvents) {
+  if (!Array.isArray(memoryEvents) || memoryEvents.length === 0) return 0.5;
+
+  var taskSignals = parseSignals(task.signals || task.title);
+  if (taskSignals.length === 0) return 0.5;
+
+  var successBySignalKey = {};
+  var totalBySignalKey = {};
+  var allSignals = {};
+
+  for (var i = 0; i < memoryEvents.length; i++) {
+    var ev = memoryEvents[i];
+    if (!ev || ev.type !== 'MemoryGraphEvent' || ev.kind !== 'outcome') continue;
+
+    var sigs = (ev.signal && Array.isArray(ev.signal.signals)) ? ev.signal.signals : [];
+    var key = (ev.signal && ev.signal.key) ? String(ev.signal.key) : '';
+    var status = (ev.outcome && ev.outcome.status) ? String(ev.outcome.status) : '';
+
+    for (var j = 0; j < sigs.length; j++) {
+      allSignals[sigs[j].toLowerCase()] = true;
+    }
+
+    if (!key) continue;
+    if (!totalBySignalKey[key]) { totalBySignalKey[key] = 0; successBySignalKey[key] = 0; }
+    totalBySignalKey[key]++;
+    if (status === 'success') successBySignalKey[key]++;
+  }
+
+  // Jaccard overlap between task signals and all signals this agent has worked with
+  var allSigArr = Object.keys(allSignals);
+  var overlapScore = jaccard(taskSignals, allSigArr);
+
+  // Weighted success rate across matching signal keys
+  var weightedSuccess = 0;
+  var weightSum = 0;
+  for (var sk in totalBySignalKey) {
+    // Reconstruct signals from the key for comparison
+    var skParts = sk.split(':').map(function(s) { return s.trim().toLowerCase(); }).filter(Boolean);
+    var sim = jaccard(taskSignals, skParts);
+    if (sim < 0.15) continue;
+
+    var total = totalBySignalKey[sk];
+    var succ = successBySignalKey[sk] || 0;
+    var rate = (succ + 1) / (total + 2); // Laplace smoothing
+    weightedSuccess += rate * sim;
+    weightSum += sim;
+  }
+
+  var successScore = weightSum > 0 ? (weightedSuccess / weightSum) : 0.5;
+
+  // Combine: 60% success rate history + 40% signal overlap
+  return Math.min(1, overlapScore * 0.4 + successScore * 0.6);
+}
+
+// ---------------------------------------------------------------------------
+// Local fallback difficulty estimation when Hub doesn't provide complexity_score
+// ---------------------------------------------------------------------------
+
+function localDifficultyEstimate(task) {
+  var signals = parseSignals(task.signals);
+  var signalFactor = Math.min(signals.length / 8, 1);
+
+  var titleWords = (task.title || '').split(/\s+/).filter(Boolean).length;
+  var titleFactor = Math.min(titleWords / 15, 1);
+
+  return Math.min(1, signalFactor * 0.6 + titleFactor * 0.4);
+}
+
+// ---------------------------------------------------------------------------
+// Score a single task for this agent
+// ---------------------------------------------------------------------------
+
+/**
+ * @param {object} task - task from Hub
+ * @param {number} capabilityMatch - from estimateCapabilityMatch()
+ * @returns {{ composite: number, factors: object }}
+ */
+function scoreTask(task, capabilityMatch) {
+  var w = STRATEGY_WEIGHTS[TASK_STRATEGY] || STRATEGY_WEIGHTS.balanced;
+
+  var difficulty = (task.complexity_score != null) ? task.complexity_score : localDifficultyEstimate(task);
+  var bountyAmount = task.bounty_amount || 0;
+  var completionRate = (task.historical_completion_rate != null) ? task.historical_completion_rate : 0.5;
+
+  // ROI: bounty per unit difficulty (higher = better value)
+  var roiRaw = bountyAmount / (difficulty + 0.1);
+  var roiNorm = Math.min(roiRaw / 200, 1); // normalize: 200-credit ROI = max
+
+  // Bounty absolute: normalize against a reference max
+  var bountyNorm = Math.min(bountyAmount / 100, 1);
+
+  var composite =
+    w.roi * roiNorm +
+    w.capability * capabilityMatch +
+    w.completion * completionRate +
+    w.bounty * bountyNorm;
+
+  return {
+    composite: Math.round(composite * 1000) / 1000,
+    factors: {
+      roi: Math.round(roiNorm * 100) / 100,
+      capability: Math.round(capabilityMatch * 100) / 100,
+      completion: Math.round(completionRate * 100) / 100,
+      bounty: Math.round(bountyNorm * 100) / 100,
+      difficulty: Math.round(difficulty * 100) / 100,
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Enhanced task selection with scoring
+// ---------------------------------------------------------------------------
+
+/**
+ * Pick the best task from a list using composite scoring.
  * @param {Array} tasks
+ * @param {Array} [memoryEvents] - from tryReadMemoryGraphEvents()
  * @returns {object|null}
  */
-function selectBestTask(tasks) {
+function selectBestTask(tasks, memoryEvents) {
   if (!Array.isArray(tasks) || tasks.length === 0) return null;
 
-  const nodeId = getNodeId();
+  var nodeId = getNodeId();
 
-  // Already-claimed tasks for this node take top priority (resume work)
-  const myClaimedTask = tasks.find(
-    t => t.status === 'claimed' && t.claimed_by_node_id === nodeId
-  );
+  // Already-claimed tasks for this node always take top priority (resume work)
+  var myClaimedTask = tasks.find(function(t) {
+    return t.status === 'claimed' && t.claimed_by_node_id === nodeId;
+  });
   if (myClaimedTask) return myClaimedTask;
 
   // Filter to open tasks only
-  const open = tasks.filter(t => t.status === 'open');
+  var open = tasks.filter(function(t) { return t.status === 'open'; });
   if (open.length === 0) return null;
 
-  // Prefer bounty tasks, sorted by amount descending
-  const bountyTasks = open.filter(t => t.bounty_id);
-  if (bountyTasks.length > 0) {
-    bountyTasks.sort((a, b) => (b.bounty_amount || 0) - (a.bounty_amount || 0));
-    return bountyTasks[0];
+  // Legacy greedy mode: preserve old behavior exactly
+  if (TASK_STRATEGY === 'greedy' && (!memoryEvents || memoryEvents.length === 0)) {
+    var bountyTasks = open.filter(function(t) { return t.bounty_id; });
+    if (bountyTasks.length > 0) {
+      bountyTasks.sort(function(a, b) { return (b.bounty_amount || 0) - (a.bounty_amount || 0); });
+      return bountyTasks[0];
+    }
+    return open[0];
   }
 
-  // Fallback: newest open task
-  return open[0];
+  // Score all open tasks
+  var scored = open.map(function(t) {
+    var cap = estimateCapabilityMatch(t, memoryEvents || []);
+    var result = scoreTask(t, cap);
+    return { task: t, composite: result.composite, factors: result.factors, capability: cap };
+  });
+
+  // Filter by minimum capability match (unless conservative skipping is off)
+  if (TASK_MIN_CAPABILITY_MATCH > 0) {
+    var filtered = scored.filter(function(s) { return s.capability >= TASK_MIN_CAPABILITY_MATCH; });
+    if (filtered.length > 0) scored = filtered;
+  }
+
+  scored.sort(function(a, b) { return b.composite - a.composite; });
+
+  // Log top 3 candidates for debugging
+  var top3 = scored.slice(0, 3);
+  for (var i = 0; i < top3.length; i++) {
+    var s = top3[i];
+    console.log('[TaskStrategy] #' + (i + 1) + ' "' + (s.task.title || s.task.task_id || '').slice(0, 50) + '" score=' + s.composite + ' ' + JSON.stringify(s.factors));
+  }
+
+  return scored[0] ? scored[0].task : null;
 }
 
 /**
@@ -191,6 +365,8 @@ function taskToSignals(task) {
 module.exports = {
   fetchTasks,
   selectBestTask,
+  estimateCapabilityMatch,
+  scoreTask,
   claimTask,
   completeTask,
   taskToSignals,
