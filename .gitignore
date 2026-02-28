@@ -9,5 +9,6 @@ dist-public/
 test/tmp/
 .docker-test-state/
 
-# Container-local device identity fallback
+# Local identity persistence (device + node)
 .evomap_device_id
+.evomap_node_id
