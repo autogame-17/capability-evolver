@@ -701,10 +701,14 @@ function rollbackNewUntrackedFiles({ repoRoot, baselineUntracked }) {
   // This prevents "ghost skill directories" where mkdir succeeded but
   // file creation failed/was rolled back. Without this, empty dirs like
   // skills/anima/, skills/oblivion/ etc. accumulate after failed innovations.
+  // SAFETY: never remove top-level structural directories (skills/, src/, etc.)
+  // or critical protected directories. Only remove leaf subdirectories.
   var dirsToCheck = new Set();
   for (var di = 0; di < deleted.length; di++) {
     var dir = path.dirname(deleted[di]);
     while (dir && dir !== '.' && dir !== '/') {
+      var normalized = dir.replace(/\\/g, '/');
+      if (!normalized.includes('/')) break;
       dirsToCheck.add(dir);
       dir = path.dirname(dir);
     }
@@ -713,6 +717,7 @@ function rollbackNewUntrackedFiles({ repoRoot, baselineUntracked }) {
   var sortedDirs = Array.from(dirsToCheck).sort(function (a, b) { return b.length - a.length; });
   var removedDirs = [];
   for (var si = 0; si < sortedDirs.length; si++) {
+    if (isCriticalProtectedPath(sortedDirs[si] + '/')) continue;
     var dirAbs = path.join(repoRoot, sortedDirs[si]);
     try {
       var entries = fs.readdirSync(dirAbs);
