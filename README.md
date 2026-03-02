@@ -129,6 +129,17 @@ node src/ops/lifecycle.js status   # show running state
 node src/ops/lifecycle.js check    # health check + auto-restart if stagnant
 ```
 
+### Cron / external runner keepalive
+If you run a periodic keepalive/tick from a cron/agent runner, prefer a single simple command with minimal quoting.
+
+Recommended:
+
+```bash
+bash -lc 'node index.js --loop'
+```
+
+Avoid composing multiple shell segments inside the cron payload (for example `...; echo EXIT:$?`) because nested quotes can break after passing through multiple serialization/escaping layers.
+
 ## Public Release
 
 This repository is the public distribution.
