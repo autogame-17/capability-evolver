@@ -1,13 +1,42 @@
 const path = require('path');
+const fs = require('fs');
 
 function getRepoRoot() {
-  // src/gep/paths.js -> repo root
+  // Prioritize environment variable for flexible deployment
+  if (process.env.EVOLVER_REPO_ROOT) {
+    return process.env.EVOLVER_REPO_ROOT;
+  }
+  
+  // Auto-detect git repository root by walking up directory tree
+  // This allows evolver to work in a parent git repository
+  let dir = path.resolve(__dirname, '..', '..');
+  while (dir !== '/' && dir !== '.') {
+    const gitDir = path.join(dir, '.git');
+    if (fs.existsSync(gitDir)) {
+      return dir;
+    }
+    dir = path.dirname(dir);
+  }
+  
+  // Fallback to default (evolver's own directory)
   return path.resolve(__dirname, '..', '..');
 }
 
 function getWorkspaceRoot() {
-  // skills/evolver -> workspace root
-  return path.resolve(getRepoRoot(), '..', '..');
+  // Prioritize environment variable
+  if (process.env.OPENCLAW_WORKSPACE) {
+    return process.env.OPENCLAW_WORKSPACE;
+  }
+  
+  // Try to find workspace directory relative to repo root
+  const repoRoot = getRepoRoot();
+  const workspaceDir = path.join(repoRoot, 'workspace');
+  if (fs.existsSync(workspaceDir)) {
+    return workspaceDir;
+  }
+  
+  // Fallback: assume evolver is at skills/evolver, go up 2 levels
+  return path.resolve(__dirname, '..', '..', '..', '..');
 }
 
 function getLogsDir() {
@@ -83,4 +112,3 @@ module.exports = {
   getEvolutionPrinciplesPath,
   getReflectionLogPath,
 };
-
