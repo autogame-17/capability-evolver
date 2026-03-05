@@ -73,6 +73,17 @@ node src/ops/lifecycle.js status   # 查看运行状态
 node src/ops/lifecycle.js check    # 健康检查 + 停滞自动重启
 ```
 
+### Cron / 外部调度器保活
+如果你通过 cron 或外部调度器定期触发 evolver，建议使用单条简单命令，避免嵌套引号：
+
+推荐写法：
+
+```bash
+bash -lc 'node index.js --loop'
+```
+
+避免在 cron payload 中拼接多个 shell 片段（例如 `...; echo EXIT:$?`），因为嵌套引号在经过多层序列化/转义后容易出错。
+
 ## 典型使用场景
 
 - 需要审计与可追踪的提示词演进
@@ -216,6 +227,8 @@ MAJOR.MINOR.PATCH
 - [LKCY33](https://github.com/LKCY33) -- 修复 .env 加载路径和目录权限问题 (PR #21)。
 - [hendrixAIDev](https://github.com/hendrixAIDev) -- 修复 dry-run 模式下 performMaintenance() 仍执行的问题 (PR #68)。
 - [toller892](https://github.com/toller892) -- 独立发现并报告了 events.jsonl forbidden_paths 冲突 bug (PR #149)。
+- [WeZZard](https://github.com/WeZZard) -- 为 SKILL.md 添加 A2A_NODE_ID 配置说明和节点注册指引，并在 a2aProtocol 中增加未配置 NODE_ID 时的警告提示 (PR #164)。
+- [Golden-Koi](https://github.com/Golden-Koi) -- 为 README 新增 cron/外部调度器保活最佳实践 (PR #167)。
 - [upbit](https://github.com/upbit) -- 在 evolver 和 evomap 技术的普及中起到了至关重要的作用。
 - [池建强](https://mowen.cn) -- 在传播和用户体验改进过程中做出了巨大贡献。
 
