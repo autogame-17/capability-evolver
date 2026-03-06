@@ -662,6 +662,30 @@ function buildFailureReason(constraintCheck, validation, protocolViolations, can
 }
 
 function rollbackTracked(repoRoot) {
+  const mode = String(process.env.EVOLVER_ROLLBACK_MODE || 'hard').toLowerCase();
+
+  if (mode === 'none') {
+    console.log('[Rollback] EVOLVER_ROLLBACK_MODE=none, skipping rollback');
+    return;
+  }
+
+  if (mode === 'stash') {
+    // SAFETY: Use git stash instead of git reset --hard to preserve changes.
+    // Changes can be recovered via "git stash list" and "git stash pop".
+    const stashRef = 'evolver-rollback-' + Date.now();
+    const result = tryRunCmd('git stash push -m "' + stashRef + '" --include-untracked', { cwd: repoRoot, timeoutMs: 60000 });
+    if (result.ok) {
+      console.log('[Rollback] Changes stashed with ref: ' + stashRef + '. Recover with "git stash list" and "git stash pop".');
+    } else {
+      // Fallback to hard reset if stash fails (e.g., no changes to stash)
+      console.log('[Rollback] Stash failed or no changes, using hard reset');
+      tryRunCmd('git restore --staged --worktree .', { cwd: repoRoot, timeoutMs: 60000 });
+      tryRunCmd('git reset --hard', { cwd: repoRoot, timeoutMs: 60000 });
+    }
+    return;
+  }
+
+  // Default: hard reset (original behavior)
   tryRunCmd('git restore --staged --worktree .', { cwd: repoRoot, timeoutMs: 60000 });
   tryRunCmd('git reset --hard', { cwd: repoRoot, timeoutMs: 60000 });
 }
