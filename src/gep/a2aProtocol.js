@@ -442,7 +442,7 @@ function sendHelloToHub() {
 
   return fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: buildHubHeaders(),
     body: JSON.stringify(msg),
     signal: AbortSignal.timeout(15000),
   })
