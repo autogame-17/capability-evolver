@@ -419,6 +419,40 @@ async function completeWorkerTask(assignmentId, resultAssetId) {
   }
 }
 
+/**
+ * Atomic claim+complete for deferred worker tasks.
+ * Called from solidify after a successful evolution cycle so we never hold
+ * an assignment that might expire before completion.
+ *
+ * @param {string} taskId
+ * @param {string} resultAssetId - sha256:... of the published capsule
+ * @returns {{ ok: boolean, assignment_id?: string, error?: string }}
+ */
+async function claimAndCompleteWorkerTask(taskId, resultAssetId) {
+  const nodeId = getNodeId();
+  if (!nodeId || !taskId || !resultAssetId) {
+    return { ok: false, error: 'missing_params' };
+  }
+
+  const assignment = await claimWorkerTask(taskId);
+  if (!assignment) {
+    return { ok: false, error: 'claim_failed' };
+  }
+
+  const assignmentId = assignment.id || assignment.assignment_id;
+  if (!assignmentId) {
+    return { ok: false, error: 'no_assignment_id' };
+  }
+
+  const completed = await completeWorkerTask(assignmentId, resultAssetId);
+  if (!completed) {
+    console.warn(`[WorkerPool] Claimed assignment ${assignmentId} but complete failed -- will expire on Hub`);
+    return { ok: false, error: 'complete_failed', assignment_id: assignmentId };
+  }
+
+  return { ok: true, assignment_id: assignmentId };
+}
+
 module.exports = {
   fetchTasks,
   selectBestTask,
@@ -429,4 +463,5 @@ module.exports = {
   taskToSignals,
   claimWorkerTask,
   completeWorkerTask,
+  claimAndCompleteWorkerTask,
 };

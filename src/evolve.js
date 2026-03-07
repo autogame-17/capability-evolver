@@ -1060,7 +1060,9 @@ async function run() {
     console.log(`[TaskReceiver] Fetch/claim failed (non-fatal): ${e.message}`);
   }
 
-  // --- Worker Pool: claim tasks from heartbeat available_work ---
+  // --- Worker Pool: select task from heartbeat available_work (deferred claim) ---
+  // Only remember the best task and inject its signals; actual claim+complete
+  // happens atomically in solidify.js after a successful evolution cycle.
   if (!activeTask && process.env.WORKER_ENABLED === '1') {
     try {
       const { consumeAvailableWork } = require('./gep/a2aProtocol');
@@ -1073,20 +1075,17 @@ async function run() {
         } catch {}
         const best = selectBestTask(workerTasks, taskMemoryEvents);
         if (best) {
-          const assignment = await claimWorkerTask(best.id || best.task_id);
-          if (assignment) {
-            activeTask = best;
-            activeTask._worker_assignment_id = assignment.id || assignment.assignment_id || null;
-            const taskSignals = taskToSignals(best);
-            for (const sig of taskSignals) {
-              if (!signals.includes(sig)) signals.unshift(sig);
-            }
-            console.log(`[WorkerPool] Claimed worker task: "${best.title || best.id}" assignment=${activeTask._worker_assignment_id} (${taskSignals.length} signals injected)`);
+          activeTask = best;
+          activeTask._worker_pending = true;
+          const taskSignals = taskToSignals(best);
+          for (const sig of taskSignals) {
+            if (!signals.includes(sig)) signals.unshift(sig);
           }
+          console.log(`[WorkerPool] Selected worker task (deferred claim): "${best.title || best.id}" (${taskSignals.length} signals injected)`);
         }
       }
     } catch (e) {
-      console.log(`[WorkerPool] Claim failed (non-fatal): ${e.message}`);
+      console.log(`[WorkerPool] Task selection failed (non-fatal): ${e.message}`);
     }
   }
 
@@ -1452,6 +1451,7 @@ async function run() {
         active_task_id: activeTask ? (activeTask.id || activeTask.task_id || null) : null,
         active_task_title: activeTask ? (activeTask.title || null) : null,
         worker_assignment_id: activeTask ? (activeTask._worker_assignment_id || null) : null,
+        worker_pending: activeTask ? (activeTask._worker_pending || false) : false,
         applied_lessons: hubLessons.map(function(l) { return l.lesson_id; }).filter(Boolean),
         hub_lessons: hubLessons,
       };

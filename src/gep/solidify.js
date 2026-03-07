@@ -1541,8 +1541,34 @@ function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } 
     const resultAssetId = capsule && capsule.asset_id ? capsule.asset_id : (capsule && capsule.id ? capsule.id : null);
     if (resultAssetId) {
       const workerAssignmentId = lastRun.worker_assignment_id || null;
-      if (workerAssignmentId) {
-        // Worker Pool path: complete via /a2a/work/complete
+      const workerPending = lastRun.worker_pending || false;
+      if (workerPending && !workerAssignmentId) {
+        // Deferred claim mode: claim + complete atomically now that we have a result
+        try {
+          const { claimAndCompleteWorkerTask } = require('./taskReceiver');
+          const taskId = String(lastRun.active_task_id);
+          console.log(`[WorkerPool] Atomic claim+complete for task "${lastRun.active_task_title || taskId}" with asset ${resultAssetId}`);
+          const result = claimAndCompleteWorkerTask(taskId, resultAssetId);
+          if (result && typeof result.then === 'function') {
+            result
+              .then(function (r) {
+                if (r.ok) {
+                  console.log('[WorkerPool] Claim+complete succeeded, assignment=' + r.assignment_id);
+                } else {
+                  console.log('[WorkerPool] Claim+complete failed: ' + (r.error || 'unknown') + (r.assignment_id ? ' assignment=' + r.assignment_id : ''));
+                }
+              })
+              .catch(function (err) {
+                console.log('[WorkerPool] Claim+complete error (non-fatal): ' + (err && err.message ? err.message : err));
+              });
+          }
+          taskCompleteResult = { attempted: true, task_id: lastRun.active_task_id, asset_id: resultAssetId, worker: true, deferred: true };
+        } catch (e) {
+          console.log('[WorkerPool] Atomic claim+complete error (non-fatal): ' + e.message);
+          taskCompleteResult = { attempted: false, reason: e.message, worker: true, deferred: true };
+        }
+      } else if (workerAssignmentId) {
+        // Legacy path: already-claimed assignment, just complete it
         try {
           const { completeWorkerTask } = require('./taskReceiver');
           console.log(`[WorkerComplete] Completing worker assignment "${workerAssignmentId}" with asset ${resultAssetId}`);
