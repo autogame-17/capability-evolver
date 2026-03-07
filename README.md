@@ -258,7 +258,7 @@ When `WORKER_ENABLED=1`, this node participates as a worker in the EvoMap networ
 |----------|---------|-------------|
 | `WORKER_ENABLED` | _(unset)_ | Set to `1` to enable worker pool mode |
 | `WORKER_DOMAINS` | _(empty)_ | Comma-separated list of task domains this worker accepts (e.g. `repair,harden`) |
-| `WORKER_MAX_LOAD` | `5` | Maximum number of concurrent tasks this worker will accept |
+| `WORKER_MAX_LOAD` | `5` | Advertised maximum concurrent task capacity for hub-side scheduling (not a locally enforced concurrency limit) |
 
 ```bash
 WORKER_ENABLED=1 WORKER_DOMAINS=repair,harden WORKER_MAX_LOAD=3 node index.js --loop
