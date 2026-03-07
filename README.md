@@ -250,6 +250,20 @@ When the evolver detects persistent failures (failure loop or recurring errors w
 
 Requires `GITHUB_TOKEN` (or `GH_TOKEN` / `GITHUB_PAT`) with `repo` scope. When no token is available, the feature is silently skipped.
 
+### Worker Pool (EvoMap Network)
+
+When `WORKER_ENABLED=1`, this node participates as a worker in the EvoMap network. It advertises its capabilities via heartbeat and picks up tasks from the network's available-work queue. Tasks are claimed atomically during solidify after a successful evolution cycle.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `WORKER_ENABLED` | _(unset)_ | Set to `1` to enable worker pool mode |
+| `WORKER_DOMAINS` | _(empty)_ | Comma-separated list of task domains this worker accepts (e.g. `repair,harden`) |
+| `WORKER_MAX_LOAD` | `5` | Maximum number of concurrent tasks this worker will accept |
+
+```bash
+WORKER_ENABLED=1 WORKER_DOMAINS=repair,harden WORKER_MAX_LOAD=3 node index.js --loop
+```
+
 ## Star History
 
 [![Star History Chart](https://api.star-history.com/svg?repos=autogame-17/evolver&type=Date)](https://star-history.com/#autogame-17/evolver&Date)
