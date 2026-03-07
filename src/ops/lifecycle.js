@@ -5,10 +5,10 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync, spawn } = require('child_process');
-const { getRepoRoot, getWorkspaceRoot, getLogsDir } = require('../gep/paths');
+const { getRepoRoot, getWorkspaceRoot, getEvolverLogPath } = require('../gep/paths');
 
 var WORKSPACE_ROOT = getWorkspaceRoot();
-var LOG_FILE = path.join(getLogsDir(), 'evolver_loop.log');
+var LOG_FILE = getEvolverLogPath();
 var PID_FILE = path.join(WORKSPACE_ROOT, 'memory', 'evolver_loop.pid');
 var MAX_SILENCE_MS = 30 * 60 * 1000;
 

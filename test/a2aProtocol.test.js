@@ -1,5 +1,8 @@
-const { describe, it } = require('node:test');
+const { describe, it, before, after } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const {
   PROTOCOL_NAME,
   PROTOCOL_VERSION,
@@ -13,6 +16,7 @@ const {
   buildRevoke,
   isValidProtocolMessage,
   unwrapAssetFromMessage,
+  sendHeartbeat,
 } = require('../src/gep/a2aProtocol');
 
 describe('protocol constants', () => {
@@ -130,5 +134,59 @@ describe('unwrapAssetFromMessage', () => {
     assert.equal(unwrapAssetFromMessage(null), null);
     assert.equal(unwrapAssetFromMessage({ random: true }), null);
     assert.equal(unwrapAssetFromMessage('string'), null);
+  });
+});
+
+describe('sendHeartbeat log touch', () => {
+  var tmpDir;
+  var originalFetch;
+  var originalHubUrl;
+  var originalLogsDir;
+
+  before(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'evolver-hb-test-'));
+    originalHubUrl = process.env.A2A_HUB_URL;
+    originalLogsDir = process.env.EVOLVER_LOGS_DIR;
+    process.env.A2A_HUB_URL = 'http://localhost:19999';
+    process.env.EVOLVER_LOGS_DIR = tmpDir;
+    originalFetch = global.fetch;
+  });
+
+  after(() => {
+    global.fetch = originalFetch;
+    process.env.A2A_HUB_URL = originalHubUrl || '';
+    process.env.EVOLVER_LOGS_DIR = originalLogsDir || '';
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('updates mtime of existing evolver_loop.log on successful heartbeat', async () => {
+    var logPath = path.join(tmpDir, 'evolver_loop.log');
+    fs.writeFileSync(logPath, '');
+    var oldTime = new Date(Date.now() - 5000);
+    fs.utimesSync(logPath, oldTime, oldTime);
+    var beforeMs = Date.now();
+
+    global.fetch = async () => ({
+      json: async () => ({ status: 'ok' }),
+    });
+
+    var result = await sendHeartbeat();
+    assert.ok(result.ok, 'heartbeat should succeed');
+
+    var mtime = fs.statSync(logPath).mtimeMs;
+    assert.ok(mtime >= beforeMs, 'mtime should be updated to at least the time before the call');
+  });
+
+  it('creates evolver_loop.log when it does not exist on successful heartbeat', async () => {
+    var logPath = path.join(tmpDir, 'evolver_loop.log');
+    if (fs.existsSync(logPath)) fs.unlinkSync(logPath);
+
+    global.fetch = async () => ({
+      json: async () => ({ status: 'ok' }),
+    });
+
+    var result = await sendHeartbeat();
+    assert.ok(result.ok, 'heartbeat should succeed');
+    assert.ok(fs.existsSync(logPath), 'evolver_loop.log should be created when missing');
   });
 });

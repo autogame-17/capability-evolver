@@ -36,6 +36,10 @@ function getLogsDir() {
   return process.env.EVOLVER_LOGS_DIR || path.join(getWorkspaceRoot(), 'logs');
 }
 
+function getEvolverLogPath() {
+  return path.join(getLogsDir(), 'evolver_loop.log');
+}
+
 function getMemoryDir() {
   return process.env.MEMORY_DIR || path.join(getWorkspaceRoot(), 'memory');
 }
@@ -96,6 +100,7 @@ module.exports = {
   getRepoRoot,
   getWorkspaceRoot,
   getLogsDir,
+  getEvolverLogPath,
   getMemoryDir,
   getEvolutionDir,
   getGepAssetsDir,
