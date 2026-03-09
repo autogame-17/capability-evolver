@@ -79,6 +79,16 @@ async function main() {
   const isLoop = args.includes('--loop') || args.includes('--mad-dog');
 
   if (command === 'run' || command === '/evolve' || isLoop) {
+    if (isLoop) {
+        const originalLog = console.log;
+        const originalWarn = console.warn;
+        const originalError = console.error;
+        function ts() { return '[' + new Date().toISOString() + ']'; }
+        console.log = (...args) => { originalLog.call(console, ts(), ...args); };
+        console.warn = (...args) => { originalWarn.call(console, ts(), ...args); };
+        console.error = (...args) => { originalError.call(console, ts(), ...args); };
+    }
+
     console.log('Starting capability evolver...');
     
     if (isLoop) {
@@ -90,6 +100,7 @@ async function main() {
 
         process.env.EVOLVE_LOOP = 'true';
         process.env.EVOLVE_BRIDGE = 'false';
+
         console.log('Loop mode enabled (internal daemon).');
 
         const { getEvolutionDir } = require('./src/gep/paths');
