@@ -95,7 +95,6 @@ function publishSkillToHub(gene, opts) {
     sender_id: nodeId,
     skill_id: skillId,
     content: content,
-    source_gene_asset_id: gene.asset_id || null,
     category: opts.category || gene.category || null,
     tags: opts.tags || gene.signals_match || [],
   };
