@@ -161,6 +161,47 @@ function formatSessionLog(jsonlContent) {
   return result.join('\n');
 }
 
+function formatCursorTranscript(raw) {
+  const lines = raw.split('\n');
+  const result = [];
+  let skipUntilNextBlock = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Keep user messages and assistant text responses
+    if (trimmed === 'user:' || trimmed.startsWith('A:')) {
+      skipUntilNextBlock = false;
+      result.push(trimmed);
+      continue;
+    }
+
+    // Tool call lines: keep as compact markers, skip their parameter block
+    if (trimmed.startsWith('[Tool call]')) {
+      skipUntilNextBlock = true;
+      result.push(`[Tool call] ${trimmed.replace('[Tool call]', '').trim()}`);
+      continue;
+    }
+
+    // Tool result markers: skip their content (usually large and noisy)
+    if (trimmed.startsWith('[Tool result]')) {
+      skipUntilNextBlock = true;
+      continue;
+    }
+
+    if (skipUntilNextBlock) continue;
+
+    // Keep user query content and assistant text (skip XML tags like <user_query>)
+    if (trimmed.startsWith('<') && trimmed.endsWith('>')) continue;
+    if (trimmed) {
+      result.push(trimmed.slice(0, 300));
+    }
+  }
+
+  return result.join('\n');
+}
+
 function readCursorTranscripts() {
   if (!CURSOR_TRANSCRIPTS_DIR) return '';
   try {
@@ -205,8 +246,11 @@ function readCursorTranscripts() {
       const readSize = Math.min(PER_FILE_BYTES, bytesLeft);
       const raw = readRecentLog(path.join(CURSOR_TRANSCRIPTS_DIR, f.name), readSize);
       if (raw.trim() && !raw.startsWith('[MISSING]')) {
-        sections.push(`--- CURSOR SESSION (${f.name}) ---\n${raw}`);
-        totalBytes += raw.length;
+        const formatted = formatCursorTranscript(raw);
+        if (formatted.trim()) {
+          sections.push(`--- CURSOR SESSION (${f.name}) ---\n${formatted}`);
+          totalBytes += formatted.length;
+        }
       }
     }
 

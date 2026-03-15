@@ -26,8 +26,12 @@ function extractToolCalls(transcript) {
   const lines = toLines(transcript);
   const calls = [];
   for (const line of lines) {
+    // OpenClaw format: [TOOL: Shell]
     const m = line.match(/\[TOOL:\s*([^\]]+)\]/i);
-    if (m && m[1]) calls.push(m[1].trim());
+    if (m && m[1]) { calls.push(m[1].trim()); continue; }
+    // Cursor transcript format: [Tool call] Shell
+    const m2 = line.match(/\[Tool call\]\s+(\S+)/i);
+    if (m2 && m2[1]) calls.push(m2[1].trim());
   }
   return calls;
 }
