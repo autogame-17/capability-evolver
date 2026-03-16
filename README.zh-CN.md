@@ -207,7 +207,7 @@ MAJOR.MINOR.PATCH
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `EVOLVER_AUTO_ISSUE` | `true` | 是否启用自动 issue 上报 |
-| `EVOLVER_ISSUE_REPO` | `autogame-17/capability-evolver` | 目标 GitHub 仓库（owner/repo） |
+| `EVOLVER_ISSUE_REPO` | `autogame-17/evolver` | 目标 GitHub 仓库（owner/repo） |
 | `EVOLVER_ISSUE_COOLDOWN_MS` | `86400000`（24 小时） | 同类错误签名的冷却期 |
 | `EVOLVER_ISSUE_MIN_STREAK` | `5` | 触发上报所需的最低连续失败次数 |
 

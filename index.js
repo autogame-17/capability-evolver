@@ -256,7 +256,7 @@ async function main() {
     // Post-run hint
     console.log('\n' + '=======================================================');
     console.log('Capability evolver finished. If you use this project, consider starring the upstream repository.');
-    console.log('Upstream: https://github.com/autogame-17/capability-evolver');
+    console.log('Upstream: https://github.com/autogame-17/evolver');
     console.log('=======================================================\n');
     
   } else if (command === 'solidify') {

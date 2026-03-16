@@ -34,6 +34,13 @@ node index.js
 
 The **Capability Evolver** inspects runtime history, extracts signals, selects a Gene/Capsule, and emits a strict GEP protocol prompt to guide safe evolution.
 
+## What's New In 2.0.0
+
+- **Stabilized runtime + solidify loop**: false-positive blast radius and empty-cycle failures were reduced by tightening baseline tracking and runtime-only diff handling.
+- **Canonical reporting convergence**: wrapper summaries, status artifacts, and Unified Evolution Report now align on the same run outcome instead of drifting apart.
+- **Structured exploration context**: exploration role/persona, target profile, and objective can now be carried as structured fields and surfaced in downstream reports.
+- **Clearer core-wrapper boundary**: evolver is responsible for emitting structured exploration context, while wrappers focus on reporting and orchestration.
+
 ## Who This Is For / Not For
 
 **For**
@@ -244,7 +251,7 @@ When the evolver detects persistent failures (failure loop or recurring errors w
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EVOLVER_AUTO_ISSUE` | `true` | Enable/disable auto issue reporting |
-| `EVOLVER_ISSUE_REPO` | `autogame-17/capability-evolver` | Target GitHub repository (owner/repo) |
+| `EVOLVER_ISSUE_REPO` | `autogame-17/evolver` | Target GitHub repository (owner/repo) |
 | `EVOLVER_ISSUE_COOLDOWN_MS` | `86400000` (24h) | Cooldown period for the same error signature |
 | `EVOLVER_ISSUE_MIN_STREAK` | `5` | Minimum consecutive failure streak to trigger |
 

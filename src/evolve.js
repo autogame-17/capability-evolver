@@ -69,6 +69,185 @@ try {
   console.warn('[Evolver] Failed to create MEMORY_DIR (may cause downstream errors):', e && e.message || e);
 }
 
+function readJsonIfExists(filePath, fallback) {
+  try {
+    if (!filePath || !fs.existsSync(filePath)) return fallback;
+    const raw = fs.readFileSync(filePath, 'utf8');
+    if (!String(raw || '').trim()) return fallback;
+    return JSON.parse(raw);
+  } catch (_) {
+    return fallback;
+  }
+}
+
+function writeJsonAtomic(filePath, value) {
+  if (!filePath) return;
+  const dirPath = path.dirname(filePath);
+  if (!fs.existsSync(dirPath)) fs.mkdirSync(dirPath, { recursive: true });
+  const tmpPath = `${filePath}.tmp.${process.pid}`;
+  fs.writeFileSync(tmpPath, JSON.stringify(value, null, 2) + '\n', 'utf8');
+  fs.renameSync(tmpPath, filePath);
+}
+
+function firstNonEmptyValue(values) {
+  for (const value of Array.isArray(values) ? values : [values]) {
+    const text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (text) return text;
+  }
+  return '';
+}
+
+function clipInlineText(value, maxLen) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return '';
+  const limit = Number.isFinite(Number(maxLen)) ? Number(maxLen) : 180;
+  return text.length <= limit ? text : `${text.slice(0, Math.max(0, limit - 3))}...`;
+}
+
+function cleanPromptLine(value) {
+  return String(value || '')
+    .replace(/\*\*/g, '')
+    .replace(/`/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function readFirstEnv(names, maxLen) {
+  for (const name of Array.isArray(names) ? names : [names]) {
+    const text = clipInlineText(process.env[name], maxLen);
+    if (text) return text;
+  }
+  return '';
+}
+
+function findPromptValue(promptText, patterns) {
+  const lines = String(promptText || '').split('\n');
+  for (const rawLine of lines) {
+    const line = cleanPromptLine(rawLine);
+    if (!line) continue;
+    for (const pattern of patterns) {
+      const match = line.match(pattern);
+      if (match && match[1]) return clipInlineText(match[1], 180);
+    }
+  }
+  return '';
+}
+
+function buildExplorationContextFromPrompt(promptText, promptMeta, promptPath) {
+  const role = firstNonEmptyValue([
+    readFirstEnv(['EVOLVER_EXPLORATION_ROLE', 'EVOLVE_EXPLORATION_ROLE'], 140),
+    findPromptValue(promptText, [
+      /Identity Updated:\s*Confirmed role as\s+(.+?)(?:[.!?]|$)/i,
+      /\brole(?: is| as|:)\s+(.+?)(?:[.!?]|$)/i,
+    ]),
+  ]);
+  const persona = firstNonEmptyValue([
+    readFirstEnv(['EVOLVER_EXPLORATION_PERSONA', 'EVOLVE_EXPLORATION_PERSONA'], 140),
+    findPromptValue(promptText, [
+      /\bpersona(?: is|:)\s+(.+?)(?:[.!?]|$)/i,
+      /\bstyle persona(?: is|:)\s+(.+?)(?:[.!?]|$)/i,
+    ]),
+  ]);
+  const targetProfileId = readFirstEnv(['EVOLVER_TARGET_PROFILE_ID', 'EVOLVE_TARGET_PROFILE_ID'], 120);
+  const targetProfileTitle = readFirstEnv(['EVOLVER_TARGET_PROFILE_TITLE', 'EVOLVE_TARGET_PROFILE_TITLE'], 160);
+  const objective = firstNonEmptyValue([
+    readFirstEnv([
+      'EVOLVER_EXPLORATION_OBJECTIVE',
+      'EVOLVE_EXPLORATION_OBJECTIVE',
+      'EVOLVER_TARGET',
+      'EVOLVE_TARGET',
+    ], 220),
+  ]);
+  const direction = firstNonEmptyValue([
+    readFirstEnv(['EVOLVER_EXPLORATION_DIRECTION', 'EVOLVE_EXPLORATION_DIRECTION'], 220),
+    objective,
+  ]);
+  const agent = firstNonEmptyValue([
+    readFirstEnv(['EVOLVER_EXPLORATION_AGENT', 'EVOLVE_EXPLORATION_AGENT'], 80),
+    promptMeta && promptMeta.agent ? String(promptMeta.agent) : '',
+    AGENT_NAME,
+  ]);
+  return {
+    role: role || null,
+    persona: persona || null,
+    agent: agent || null,
+    target_profile_id: targetProfileId || null,
+    target_profile_title: targetProfileTitle || null,
+    exploration_objective: objective || null,
+    direction: direction || null,
+    prompt_path: promptPath || null,
+  };
+}
+
+function hasExplorationContext(context) {
+  const value = context && typeof context === 'object' ? context : {};
+  return [
+    value.role,
+    value.persona,
+    value.agent,
+    value.target_profile_id,
+    value.target_profile_title,
+    value.exploration_objective,
+    value.direction,
+    value.prompt_path,
+  ].some(item => String(item || '').trim());
+}
+
+function mergeExplorationContextIntoLastRun(runId, extras) {
+  if (!runId || !extras || typeof extras !== 'object') return;
+  try {
+    const state = readStateForSolidify();
+    const lastRun = state && state.last_run ? state.last_run : null;
+    if (!lastRun || String(lastRun.run_id || '') !== String(runId)) return;
+    const nextContext = Object.assign({}, lastRun.exploration_context || {}, extras.exploration_context || {});
+    lastRun.prompt_path = extras.prompt_path || lastRun.prompt_path || null;
+    lastRun.prompt_meta = extras.prompt_meta || lastRun.prompt_meta || null;
+    lastRun.exploration_context = nextContext;
+    lastRun.exploration_role = nextContext.role || null;
+    lastRun.exploration_persona = nextContext.persona || null;
+    lastRun.exploration_agent = nextContext.agent || null;
+    lastRun.target_profile_id = nextContext.target_profile_id || lastRun.target_profile_id || null;
+    lastRun.target_profile_title = nextContext.target_profile_title || lastRun.target_profile_title || null;
+    lastRun.exploration_objective = nextContext.exploration_objective || lastRun.exploration_objective || null;
+    lastRun.exploration_direction = nextContext.direction || lastRun.exploration_direction || null;
+    writeStateForSolidify(state);
+  } catch (e) {
+    console.warn('[ExplorationContext] Failed to merge context into solidify state:', e && e.message || e);
+  }
+}
+
+function writeExplorationStatusContext(runInfo, explorationContext) {
+  if (!hasExplorationContext(explorationContext)) return null;
+  try {
+    const statusPath = path.join(getEvolutionDir(), 'exploration_status.json');
+    const existing = readJsonIfExists(statusPath, {}) || {};
+    const next = Object.assign({}, existing, {
+      timestamp: existing.timestamp || (runInfo && runInfo.created_at ? runInfo.created_at : new Date().toISOString()),
+      status: existing.status || 'active',
+      run_id: runInfo && runInfo.run_id ? runInfo.run_id : (existing.run_id || null),
+      cycle_id: runInfo && runInfo.cycle_id ? runInfo.cycle_id : (existing.cycle_id || null),
+      role: explorationContext.role || existing.role || null,
+      persona: explorationContext.persona || existing.persona || null,
+      agent: explorationContext.agent || existing.agent || null,
+      target_profile_id: explorationContext.target_profile_id || existing.target_profile_id || null,
+      target_profile_title: explorationContext.target_profile_title || existing.target_profile_title || null,
+      exploration_objective: explorationContext.exploration_objective || existing.exploration_objective || null,
+      direction: explorationContext.direction || existing.direction || null,
+      prompt_path: explorationContext.prompt_path || existing.prompt_path || null,
+      context_source: 'evolver_prompt_context',
+      context_updated_at: new Date().toISOString(),
+    });
+    if (!next.message) {
+      next.message = 'Exploration context captured from the latest evolver prompt.';
+    }
+    writeJsonAtomic(statusPath, next);
+    return next;
+  } catch (e) {
+    console.warn('[ExplorationContext] Failed to update exploration status:', e && e.message || e);
+    return null;
+  }
+}
+
 function formatSessionLog(jsonlContent) {
   const result = [];
   const lines = jsonlContent.split('\n');
@@ -1773,23 +1952,43 @@ ${mutationDirective}
       if (st && st.last_run && st.last_run.run_id) runId = String(st.last_run.run_id);
     } catch (e) {}
     let artifact = null;
+    const promptMeta = {
+      agent: AGENT_NAME,
+      drift_enabled: IS_RANDOM_DRIFT,
+      review_mode: IS_REVIEW_MODE,
+      dry_run: IS_DRY_RUN,
+      mutation_id: mutation && mutation.id ? mutation.id : null,
+      personality_key: personalitySelection && personalitySelection.personality_key ? personalitySelection.personality_key : null,
+    };
     try {
       artifact = writePromptArtifact({
         memoryDir: getEvolutionDir(),
         cycleId,
         runId,
         prompt,
-        meta: {
-          agent: AGENT_NAME,
-          drift_enabled: IS_RANDOM_DRIFT,
-          review_mode: IS_REVIEW_MODE,
-          dry_run: IS_DRY_RUN,
-          mutation_id: mutation && mutation.id ? mutation.id : null,
-          personality_key: personalitySelection && personalitySelection.personality_key ? personalitySelection.personality_key : null,
-        },
+        meta: promptMeta,
       });
     } catch (e) {
       artifact = null;
+    }
+    try {
+      const explorationContext = buildExplorationContextFromPrompt(
+        prompt,
+        promptMeta,
+        artifact && artifact.promptPath ? artifact.promptPath : null
+      );
+      mergeExplorationContextIntoLastRun(runId, {
+        prompt_path: artifact && artifact.promptPath ? artifact.promptPath : null,
+        prompt_meta: promptMeta,
+        exploration_context: explorationContext,
+      });
+      writeExplorationStatusContext({
+        run_id: runId,
+        cycle_id: cycleId,
+        created_at: new Date().toISOString(),
+      }, explorationContext);
+    } catch (e) {
+      console.warn('[ExplorationContext] Failed to persist prompt context:', e && e.message || e);
     }
 
     const executorTask = [
