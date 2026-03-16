@@ -266,6 +266,7 @@ function buildGepPrompt({
   recentHistory,
   failedCapsules,
   hubLessons,
+  strategyPolicy,
 }) {
   const parentValue = parentEventId ? `"${parentEventId}"` : 'null';
   const selectedGeneId = selectedGene && selectedGene.id ? selectedGene.id : 'gene_<name>';
@@ -289,6 +290,15 @@ ACTIVE STRATEGY (Generic):
 3. Apply minimal, safe changes.
 4. Validate changes strictly.
 5. Solidify knowledge.
+`.trim();
+  }
+  let strategyPolicyBlock = '';
+  if (strategyPolicy && Array.isArray(strategyPolicy.directives) && strategyPolicy.directives.length > 0) {
+    strategyPolicyBlock = `
+ADAPTIVE STRATEGY POLICY:
+${strategyPolicy.directives.map((s, i) => `${i + 1}. ${s}`).join('\n')}
+${strategyPolicy.forceInnovate ? 'You MUST prefer INNOVATE unless a critical blocking error is present.' : ''}
+${strategyPolicy.cautiousExecution ? 'You MUST reduce blast radius and avoid broad refactors in this cycle.' : ''}
 `.trim();
   }
   
@@ -384,6 +394,7 @@ II. Directives & Logic
 
 2. Selection: Selected Gene "${selectedGeneId}".
 ${strategyBlock}
+${strategyPolicyBlock ? '\n' + strategyPolicyBlock : ''}
 
 3. Execution: Apply changes (tool calls). Repair/Optimize: small/reversible. Innovate: new skills in \`skills/<name>/\`.
 4. Validation: Run gene's validation steps. Fail = ROLLBACK.

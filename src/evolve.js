@@ -39,6 +39,8 @@ const { getEvolutionDir } = require('./gep/paths');
 const { shouldReflect, buildReflectionContext, recordReflection } = require('./gep/reflection');
 const { loadNarrativeSummary } = require('./gep/narrativeMemory');
 const { maybeReportIssue } = require('./gep/issueReporter');
+const { resolveStrategy } = require('./gep/strategy');
+const { expandSignals } = require('./gep/learningSignals');
 
 const REPO_ROOT = getRepoRoot();
 
@@ -345,6 +347,73 @@ function getMutationDirective(logContent) {
 - stability: ${isUnstable ? 'unstable' : 'stable'}
 - recommended_intent: ${recommendedIntent}
 `;
+}
+
+function computeAdaptiveStrategyPolicy(opts) {
+  const recentEvents = Array.isArray(opts && opts.recentEvents) ? opts.recentEvents : [];
+  const selectedGene = opts && opts.selectedGene ? opts.selectedGene : null;
+  const signals = Array.isArray(opts && opts.signals) ? opts.signals : [];
+  const baseStrategy = resolveStrategy({ signals: signals });
+
+  const tail = recentEvents.slice(-8);
+  let repairStreak = 0;
+  for (let i = tail.length - 1; i >= 0; i--) {
+    if (tail[i] && tail[i].intent === 'repair') repairStreak++;
+    else break;
+  }
+  let failureStreak = 0;
+  for (let i = tail.length - 1; i >= 0; i--) {
+    if (tail[i] && tail[i].outcome && tail[i].outcome.status === 'failed') failureStreak++;
+    else break;
+  }
+
+  const antiPatterns = selectedGene && Array.isArray(selectedGene.anti_patterns) ? selectedGene.anti_patterns.slice(-5) : [];
+  const learningHistory = selectedGene && Array.isArray(selectedGene.learning_history) ? selectedGene.learning_history.slice(-6) : [];
+  const signalTags = new Set(expandSignals(signals, ''));
+  const overlappingAntiPatterns = antiPatterns.filter(function (ap) {
+    return ap && Array.isArray(ap.learning_signals) && ap.learning_signals.some(function (tag) {
+      return signalTags.has(String(tag));
+    });
+  });
+  const hardFailures = overlappingAntiPatterns.filter(function (ap) { return ap && ap.mode === 'hard'; }).length;
+  const softFailures = overlappingAntiPatterns.filter(function (ap) { return ap && ap.mode !== 'hard'; }).length;
+  const recentSuccesses = learningHistory.filter(function (x) { return x && x.outcome === 'success'; }).length;
+
+  const stagnation = signals.includes('stable_success_plateau') ||
+    signals.includes('evolution_saturation') ||
+    signals.includes('empty_cycle_loop_detected') ||
+    failureStreak >= 3 ||
+    repairStreak >= 3;
+
+  const forceInnovate = stagnation && !signals.includes('log_error');
+  const highRiskGene = hardFailures >= 1 || (softFailures >= 2 && recentSuccesses === 0);
+  const cautiousExecution = highRiskGene || failureStreak >= 2;
+
+  let blastRadiusMaxFiles = selectedGene && selectedGene.constraints && Number.isFinite(Number(selectedGene.constraints.max_files))
+    ? Number(selectedGene.constraints.max_files)
+    : 12;
+  if (cautiousExecution) blastRadiusMaxFiles = Math.max(2, Math.min(blastRadiusMaxFiles, 6));
+  else if (forceInnovate) blastRadiusMaxFiles = Math.max(3, Math.min(blastRadiusMaxFiles, 10));
+
+  const directives = [];
+  directives.push('Base strategy: ' + baseStrategy.label + ' (' + baseStrategy.description + ')');
+  if (forceInnovate) directives.push('Force strategy shift: prefer innovate over repeating repair/optimize.');
+  if (highRiskGene) directives.push('Selected gene is high risk for current signals; keep blast radius narrow and prefer smallest viable change.');
+  if (failureStreak >= 2) directives.push('Recent failure streak detected; avoid repeating recent failed approach.');
+  directives.push('Target max files for this cycle: ' + blastRadiusMaxFiles + '.');
+
+  return {
+    name: baseStrategy.name,
+    label: baseStrategy.label,
+    description: baseStrategy.description,
+    forceInnovate: forceInnovate,
+    cautiousExecution: cautiousExecution,
+    highRiskGene: highRiskGene,
+    repairStreak: repairStreak,
+    failureStreak: failureStreak,
+    blastRadiusMaxFiles: blastRadiusMaxFiles,
+    directives: directives,
+  };
 }
 
 const STATE_FILE = path.join(getEvolutionDir(), 'evolution_state.json');
@@ -1178,6 +1247,7 @@ async function run() {
   const newCandidates = extractCapabilityCandidates({
     recentSessionTranscript: recentMasterLog,
     signals,
+    recentFailedCapsules: readRecentFailedCapsules(50),
   });
   for (const c of newCandidates) {
     try {
@@ -1321,6 +1391,11 @@ async function run() {
     ? capsuleCandidates.map(c => (c && c.id ? String(c.id) : null)).filter(Boolean)
     : [];
   const selectedCapsuleId = capsulesUsed.length ? capsulesUsed[0] : null;
+  const strategyPolicy = computeAdaptiveStrategyPolicy({
+    recentEvents,
+    selectedGene,
+    signals,
+  });
 
   // Personality selection (natural selection + small mutation when triggered).
   // This state is persisted in MEMORY_DIR and is treated as an evolution control surface (not role-play).
@@ -1351,9 +1426,9 @@ async function run() {
     tailAvgScore >= 0.7;
   const forceInnovation =
     String(process.env.FORCE_INNOVATION || process.env.EVOLVE_FORCE_INNOVATION || '').toLowerCase() === 'true';
-  const mutationInnovateMode = !!IS_RANDOM_DRIFT || !!innovationPressure || !!forceInnovation;
+  const mutationInnovateMode = !!IS_RANDOM_DRIFT || !!innovationPressure || !!forceInnovation || !!strategyPolicy.forceInnovate;
   const mutationSignals = innovationPressure ? [...(Array.isArray(signals) ? signals : []), 'stable_success_plateau'] : signals;
-  const mutationSignalsEffective = forceInnovation
+  const mutationSignalsEffective = (forceInnovation || strategyPolicy.forceInnovate)
     ? [...(Array.isArray(mutationSignals) ? mutationSignals : []), 'force_innovation']
     : mutationSignals;
 
@@ -1454,10 +1529,13 @@ async function run() {
       console.warn('[SolidifyState] Failed to read git HEAD:', e && e.message || e);
     }
 
-    const maxFiles =
-      selectedGene && selectedGene.constraints && Number.isFinite(Number(selectedGene.constraints.max_files))
-        ? Number(selectedGene.constraints.max_files)
-        : 12;
+    const maxFiles = strategyPolicy && Number.isFinite(Number(strategyPolicy.blastRadiusMaxFiles))
+      ? Number(strategyPolicy.blastRadiusMaxFiles)
+      : (
+        selectedGene && selectedGene.constraints && Number.isFinite(Number(selectedGene.constraints.max_files))
+          ? Number(selectedGene.constraints.max_files)
+          : 12
+      );
     const blastRadiusEstimate = {
       files: Number.isFinite(maxFiles) && maxFiles > 0 ? maxFiles : 0,
       lines: Number.isFinite(maxFiles) && maxFiles > 0 ? Math.round(maxFiles * 80) : 0,
@@ -1491,6 +1569,7 @@ async function run() {
         baseline_untracked: baselineUntracked,
         baseline_git_head: baselineHead,
         blast_radius_estimate: blastRadiusEstimate,
+        strategy_policy: strategyPolicy,
         active_task_id: activeTask ? (activeTask.id || activeTask.task_id || null) : null,
         active_task_title: activeTask ? (activeTask.title || null) : null,
         worker_assignment_id: activeTask ? (activeTask._worker_assignment_id || null) : null,
@@ -1628,6 +1707,7 @@ ${mutationDirective}
         capabilityCandidatesPreview,
         externalCandidatesPreview,
         hubMatchedBlock,
+        strategyPolicy,
         failedCapsules: recentFailedCapsules,
         hubLessons,
       });
@@ -1716,5 +1796,4 @@ ${mutationDirective}
   }
 }
 
-module.exports = { run };
-
+module.exports = { run, computeAdaptiveStrategyPolicy };

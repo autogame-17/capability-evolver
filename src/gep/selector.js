@@ -1,3 +1,6 @@
+const { scoreTagOverlap } = require('./learningSignals');
+const { captureEnvFingerprint } = require('./envFingerprint');
+
 function matchPatternToSignals(pattern, signals) {
   if (!pattern || !signals || signals.length === 0) return false;
   const p = String(pattern);
@@ -30,12 +33,54 @@ function matchPatternToSignals(pattern, signals) {
 function scoreGene(gene, signals) {
   if (!gene || gene.type !== 'Gene') return 0;
   const patterns = Array.isArray(gene.signals_match) ? gene.signals_match : [];
-  if (patterns.length === 0) return 0;
+  var tagScore = scoreTagOverlap(gene, signals);
+  if (patterns.length === 0) return tagScore > 0 ? tagScore * 0.6 : 0;
   let score = 0;
   for (const pat of patterns) {
     if (matchPatternToSignals(pat, signals)) score += 1;
   }
-  return score;
+  return score + (tagScore * 0.6);
+}
+
+function getEpigeneticBoostLocal(gene, envFingerprint) {
+  if (!gene || !Array.isArray(gene.epigenetic_marks)) return 0;
+  const platform = envFingerprint && envFingerprint.platform ? String(envFingerprint.platform) : '';
+  const arch = envFingerprint && envFingerprint.arch ? String(envFingerprint.arch) : '';
+  const nodeVersion = envFingerprint && envFingerprint.node_version ? String(envFingerprint.node_version) : '';
+  const envContext = [platform, arch, nodeVersion].filter(Boolean).join('/') || 'unknown';
+  const mark = gene.epigenetic_marks.find(function (m) { return m && m.context === envContext; });
+  return mark ? Number(mark.boost) || 0 : 0;
+}
+
+function scoreGeneLearning(gene, signals, envFingerprint) {
+  if (!gene || gene.type !== 'Gene') return 0;
+  var boost = 0;
+
+  var history = Array.isArray(gene.learning_history) ? gene.learning_history.slice(-8) : [];
+  for (var i = 0; i < history.length; i++) {
+    var entry = history[i];
+    if (!entry) continue;
+    if (entry.outcome === 'success') boost += 0.12;
+    else if (entry.mode === 'hard') boost -= 0.22;
+    else if (entry.mode === 'soft') boost -= 0.08;
+  }
+
+  boost += getEpigeneticBoostLocal(gene, envFingerprint);
+
+  if (Array.isArray(gene.anti_patterns) && gene.anti_patterns.length > 0) {
+    var overlapPenalty = 0;
+    var signalTags = new Set(require('./learningSignals').expandSignals(signals, ''));
+    var recentAntiPatterns = gene.anti_patterns.slice(-6);
+    for (var j = 0; j < recentAntiPatterns.length; j++) {
+      var anti = recentAntiPatterns[j];
+      if (!anti || !Array.isArray(anti.learning_signals)) continue;
+      var overlap = anti.learning_signals.some(function (tag) { return signalTags.has(String(tag)); });
+      if (overlap) overlapPenalty += anti.mode === 'hard' ? 0.4 : 0.18;
+    }
+    boost -= overlapPenalty;
+  }
+
+  return Math.max(-1.5, Math.min(1.5, boost));
 }
 
 // Population-size-dependent drift intensity.
@@ -90,9 +135,11 @@ function selectGene(genes, signals, opts) {
   var DISTILLED_PREFIX = 'gene_distilled_';
   var DISTILLED_SCORE_FACTOR = 0.8;
 
+  const envFingerprint = captureEnvFingerprint();
   const scored = genesList
     .map(g => {
       var s = scoreGene(g, signals);
+      s += scoreGeneLearning(g, signals, envFingerprint);
       if (s > 0 && g.id && String(g.id).startsWith(DISTILLED_PREFIX)) s *= DISTILLED_SCORE_FACTOR;
       return { gene: g, score: s };
     })
@@ -247,4 +294,3 @@ module.exports = {
   buildSelectorDecision,
   matchPatternToSignals,
 };
-

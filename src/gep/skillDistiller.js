@@ -4,6 +4,7 @@ var fs = require('fs');
 var path = require('path');
 var crypto = require('crypto');
 var paths = require('./paths');
+var learningSignals = require('./learningSignals');
 
 var DISTILLER_MIN_CAPSULES = parseInt(process.env.DISTILLER_MIN_CAPSULES || '10', 10) || 10;
 var DISTILLER_INTERVAL_HOURS = parseInt(process.env.DISTILLER_INTERVAL_HOURS || '24', 10) || 24;
@@ -266,6 +267,126 @@ function buildDistillationPrompt(analysis, existingGenes, sampleCapsules) {
 
 function distillRequestPath() {
   return path.join(paths.getMemoryDir(), 'distill_request.json');
+}
+
+function inferCategoryFromSignals(signals) {
+  var list = Array.isArray(signals) ? signals.map(function (s) { return String(s).toLowerCase(); }) : [];
+  if (list.some(function (s) { return s.indexOf('error') !== -1 || s.indexOf('fail') !== -1 || s.indexOf('reliability') !== -1; })) {
+    return 'repair';
+  }
+  if (list.some(function (s) { return s.indexOf('feature') !== -1 || s.indexOf('capability') !== -1 || s.indexOf('stagnation') !== -1; })) {
+    return 'innovate';
+  }
+  return 'optimize';
+}
+
+function chooseDistillationSource(data, analysis) {
+  var grouped = data && data.grouped ? data.grouped : {};
+  var best = null;
+  Object.keys(grouped).forEach(function (geneId) {
+    var g = grouped[geneId];
+    if (!g || g.total_count <= 0) return;
+    var score = (g.total_count * 2) + (g.avg_score || 0);
+    if (!best || score > best.score) {
+      best = { gene_id: geneId, group: g, score: score };
+    }
+  });
+  return best;
+}
+
+function synthesizeGeneFromPatterns(data, analysis, existingGenes) {
+  var source = chooseDistillationSource(data, analysis);
+  if (!source || !source.group) return null;
+
+  var group = source.group;
+  var existing = Array.isArray(existingGenes) ? existingGenes : [];
+  var sourceGene = existing.find(function (g) { return g && g.id === source.gene_id; }) || null;
+
+  var triggerFreq = {};
+  (group.triggers || []).forEach(function (arr) {
+    (Array.isArray(arr) ? arr : []).forEach(function (s) {
+      var k = String(s).toLowerCase();
+      triggerFreq[k] = (triggerFreq[k] || 0) + 1;
+    });
+  });
+  var signalsMatch = Object.keys(triggerFreq)
+    .sort(function (a, b) { return triggerFreq[b] - triggerFreq[a]; })
+    .slice(0, 6);
+  var summaryText = (group.summaries || []).slice(0, 5).join(' ');
+  var derivedTags = learningSignals.expandSignals(signalsMatch, summaryText)
+    .filter(function (tag) { return tag.indexOf('problem:') === 0 || tag.indexOf('area:') === 0; })
+    .slice(0, 4);
+  signalsMatch = Array.from(new Set(signalsMatch.concat(derivedTags)));
+  if (signalsMatch.length === 0 && sourceGene && Array.isArray(sourceGene.signals_match)) {
+    signalsMatch = sourceGene.signals_match.slice(0, 6);
+  }
+
+  var category = sourceGene && sourceGene.category ? sourceGene.category : inferCategoryFromSignals(signalsMatch);
+  var idSeed = {
+    type: 'Gene',
+    id: DISTILLED_ID_PREFIX + source.gene_id.replace(/^gene_/, '').replace(/^gene_distilled_/, ''),
+    category: category,
+    signals_match: signalsMatch,
+    strategy: sourceGene && Array.isArray(sourceGene.strategy) && sourceGene.strategy.length > 0
+      ? sourceGene.strategy.slice(0, 4)
+      : [
+        'Identify the dominant repeated trigger pattern.',
+        'Apply the smallest targeted change for that pattern.',
+        'Run the narrowest validation that proves the regression is gone.',
+        'Rollback immediately if validation fails.',
+      ],
+  };
+
+  var summaryBase = (group.summaries && group.summaries[0]) ? String(group.summaries[0]) : '';
+  if (!summaryBase) {
+    summaryBase = 'Reusable strategy for repeated successful pattern: ' + signalsMatch.slice(0, 3).join(', ');
+  }
+
+  var gene = {
+    type: 'Gene',
+    id: deriveDescriptiveId(idSeed),
+    summary: summaryBase.slice(0, 200),
+    category: category,
+    signals_match: signalsMatch,
+    preconditions: sourceGene && Array.isArray(sourceGene.preconditions) && sourceGene.preconditions.length > 0
+      ? sourceGene.preconditions.slice(0, 4)
+      : ['repeated success pattern observed in recent capsules'],
+    strategy: idSeed.strategy,
+    constraints: {
+      max_files: sourceGene && sourceGene.constraints && Number(sourceGene.constraints.max_files) > 0
+        ? Math.min(DISTILLED_MAX_FILES, Number(sourceGene.constraints.max_files))
+        : DISTILLED_MAX_FILES,
+      forbidden_paths: sourceGene && sourceGene.constraints && Array.isArray(sourceGene.constraints.forbidden_paths)
+        ? sourceGene.constraints.forbidden_paths.slice(0, 6)
+        : ['.git', 'node_modules'],
+    },
+    validation: sourceGene && Array.isArray(sourceGene.validation) && sourceGene.validation.length > 0
+      ? sourceGene.validation.slice(0, 4)
+      : ['node --test'],
+  };
+
+  return gene;
+}
+
+function finalizeDistilledGene(gene, requestLike, status) {
+  var state = readDistillerState();
+  state.last_distillation_at = new Date().toISOString();
+  state.last_data_hash = requestLike.data_hash;
+  state.last_gene_id = gene.id;
+  state.distillation_count = (state.distillation_count || 0) + 1;
+  writeDistillerState(state);
+
+  appendJsonl(distillerLogPath(), {
+    timestamp: new Date().toISOString(),
+    data_hash: requestLike.data_hash,
+    input_capsule_count: requestLike.input_capsule_count,
+    analysis_summary: requestLike.analysis_summary,
+    synthesized_gene_id: gene.id,
+    validation_passed: true,
+    validation_errors: [],
+    status: status || 'success',
+    gene: gene,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -560,11 +681,67 @@ function completeDistillation(responseText) {
   return { ok: true, gene: gene };
 }
 
+function autoDistill() {
+  var data = collectDistillationData();
+  if (data.successCapsules.length < DISTILLER_MIN_CAPSULES) {
+    return { ok: false, reason: 'insufficient_data' };
+  }
+
+  var state = readDistillerState();
+  if (state.last_data_hash === data.dataHash) {
+    return { ok: false, reason: 'idempotent_skip' };
+  }
+
+  var analysis = analyzePatterns(data);
+  var assetsDir = paths.getGepAssetsDir();
+  var existingGenesJson = readJsonIfExists(path.join(assetsDir, 'genes.json'), { genes: [] });
+  var existingGenes = existingGenesJson.genes || [];
+  var rawGene = synthesizeGeneFromPatterns(data, analysis, existingGenes);
+  if (!rawGene) return { ok: false, reason: 'no_candidate_gene' };
+
+  var validation = validateSynthesizedGene(rawGene, existingGenes);
+  if (!validation.valid) {
+    appendJsonl(distillerLogPath(), {
+      timestamp: new Date().toISOString(),
+      data_hash: data.dataHash,
+      status: 'auto_validation_failed',
+      synthesized_gene_id: validation.gene ? validation.gene.id : null,
+      validation_errors: validation.errors,
+    });
+    return { ok: false, reason: 'validation_failed', errors: validation.errors };
+  }
+
+  var gene = validation.gene;
+  gene._distilled_meta = {
+    distilled_at: new Date().toISOString(),
+    source_capsule_count: data.successCapsules.length,
+    data_hash: data.dataHash,
+    auto_distilled: true,
+  };
+
+  var assetStore = require('./assetStore');
+  assetStore.upsertGene(gene);
+  finalizeDistilledGene(gene, {
+    data_hash: data.dataHash,
+    input_capsule_count: data.successCapsules.length,
+    analysis_summary: {
+      high_frequency_count: analysis.high_frequency.length,
+      drift_count: analysis.strategy_drift.length,
+      gap_count: analysis.coverage_gaps.length,
+      success_rate: Math.round(analysis.success_rate * 100) / 100,
+    },
+  }, 'auto_success');
+
+  return { ok: true, gene: gene, auto: true };
+}
+
 module.exports = {
   collectDistillationData: collectDistillationData,
   analyzePatterns: analyzePatterns,
+  synthesizeGeneFromPatterns: synthesizeGeneFromPatterns,
   prepareDistillation: prepareDistillation,
   completeDistillation: completeDistillation,
+  autoDistill: autoDistill,
   validateSynthesizedGene: validateSynthesizedGene,
   shouldDistill: shouldDistill,
   buildDistillationPrompt: buildDistillationPrompt,

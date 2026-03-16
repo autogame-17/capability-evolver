@@ -273,16 +273,21 @@ async function main() {
 
       if (res && res.ok && !dryRun) {
         try {
-          const { shouldDistill, prepareDistillation } = require('./src/gep/skillDistiller');
+          const { shouldDistill, prepareDistillation, autoDistill } = require('./src/gep/skillDistiller');
           if (shouldDistill()) {
-            const dr = prepareDistillation();
-            if (dr && dr.ok && dr.promptPath) {
-              console.log('\n[DISTILL_REQUEST]');
-              console.log('Distillation prompt ready. Read the prompt file, process it with your LLM,');
-              console.log('save the LLM response to a file, then run:');
-              console.log('  node index.js distill --response-file=<path_to_llm_response>');
-              console.log('Prompt file: ' + dr.promptPath);
-              console.log('[/DISTILL_REQUEST]');
+            const auto = autoDistill();
+            if (auto && auto.ok && auto.gene) {
+              console.log('[Distiller] Auto-distilled gene: ' + auto.gene.id);
+            } else {
+              const dr = prepareDistillation();
+              if (dr && dr.ok && dr.promptPath) {
+                console.log('\n[DISTILL_REQUEST]');
+                console.log('Distillation prompt ready. Read the prompt file, process it with your LLM,');
+                console.log('save the LLM response to a file, then run:');
+                console.log('  node index.js distill --response-file=<path_to_llm_response>');
+                console.log('Prompt file: ' + dr.promptPath);
+                console.log('[/DISTILL_REQUEST]');
+              }
             }
           }
         } catch (e) {

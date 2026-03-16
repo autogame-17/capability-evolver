@@ -27,6 +27,15 @@ const GENES = [
     strategy: ['build it'],
     validation: ['node -e "true"'],
   },
+  {
+    type: 'Gene',
+    id: 'gene_perf_optimize',
+    category: 'optimize',
+    signals_match: ['latency', 'throughput'],
+    summary: 'Reduce latency and improve throughput on slow paths',
+    strategy: ['speed it up'],
+    validation: ['node -e "true"'],
+  },
 ];
 
 const CAPSULES = [
@@ -92,6 +101,47 @@ describe('selectGene', () => {
     const result = selectGene(GENES, ['user_improvement_suggestion:refactor the payment module and simplify the API'], {});
     assert.ok(result.selected);
     assert.equal(result.selected.id, 'gene_innovate', 'innovate gene has signals_match user_improvement_suggestion');
+  });
+
+  it('uses derived learning tags to match related performance genes', () => {
+    const originalRandom = Math.random;
+    Math.random = () => 0.99;
+    try {
+      const result = selectGene(GENES, ['perf_bottleneck'], { effectivePopulationSize: 100 });
+      assert.ok(result.selected);
+      assert.equal(result.selected.id, 'gene_perf_optimize');
+    } finally {
+      Math.random = originalRandom;
+    }
+  });
+
+  it('downweights genes with repeated hard-fail anti-patterns', () => {
+    const riskyGenes = [
+      {
+        type: 'Gene',
+        id: 'gene_perf_risky',
+        category: 'optimize',
+        signals_match: ['perf_bottleneck'],
+        anti_patterns: [
+          { mode: 'hard', learning_signals: ['problem:performance'] },
+          { mode: 'hard', learning_signals: ['problem:performance'] },
+        ],
+        validation: ['node -e "true"'],
+      },
+      {
+        type: 'Gene',
+        id: 'gene_perf_safe',
+        category: 'optimize',
+        signals_match: ['perf_bottleneck'],
+        learning_history: [
+          { outcome: 'success', mode: 'none' },
+        ],
+        validation: ['node -e "true"'],
+      },
+    ];
+    const result = selectGene(riskyGenes, ['perf_bottleneck'], { effectivePopulationSize: 100 });
+    assert.ok(result.selected);
+    assert.equal(result.selected.id, 'gene_perf_safe');
   });
 });
 

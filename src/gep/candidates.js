@@ -1,3 +1,5 @@
+const { expandSignals } = require('./learningSignals');
+
 function stableHash(input) {
   // Deterministic lightweight hash (not cryptographic).
   const s = String(input || '');
@@ -56,13 +58,15 @@ function buildFiveQuestionsShape({ title, signals, evidence }) {
   };
 }
 
-function extractCapabilityCandidates({ recentSessionTranscript, signals }) {
+function extractCapabilityCandidates({ recentSessionTranscript, signals, recentFailedCapsules }) {
   const candidates = [];
+  const signalList = Array.isArray(signals) ? signals : [];
+  const expandedTags = expandSignals(signalList, recentSessionTranscript);
   const toolCalls = extractToolCalls(recentSessionTranscript);
   const freq = countFreq(toolCalls);
 
   for (const [tool, count] of freq.entries()) {
-    if (count < 2) continue;
+    if (count < 3) continue;
     const title = `Repeated tool usage: ${tool}`;
     const evidence = `Observed ${count} occurrences of tool call marker for ${tool}.`;
     const shape = buildFiveQuestionsShape({ title, signals, evidence });
@@ -72,13 +76,13 @@ function extractCapabilityCandidates({ recentSessionTranscript, signals }) {
       title,
       source: 'transcript',
       created_at: new Date().toISOString(),
-      signals: Array.isArray(signals) ? signals : [],
+      signals: signalList,
+      tags: expandedTags,
       shape,
     });
   }
 
   // Signals-as-candidates: capture recurring pain points as reusable capability shapes.
-  const signalList = Array.isArray(signals) ? signals : [];
   const signalCandidates = [
     // Defensive signals
     { signal: 'log_error', title: 'Repair recurring runtime errors' },
@@ -105,9 +109,66 @@ function extractCapabilityCandidates({ recentSessionTranscript, signals }) {
       source: 'signals',
       created_at: new Date().toISOString(),
       signals: signalList,
+      tags: expandedTags,
       shape,
     });
   }
+
+  var failedCapsules = Array.isArray(recentFailedCapsules) ? recentFailedCapsules : [];
+  var groups = {};
+  var problemPriority = [
+    'problem:performance',
+    'problem:protocol',
+    'problem:reliability',
+    'problem:stagnation',
+    'problem:capability',
+  ];
+  for (var i = 0; i < failedCapsules.length; i++) {
+    var fc = failedCapsules[i];
+    if (!fc || fc.outcome && fc.outcome.status === 'success') continue;
+    var reason = String(fc.failure_reason || '').trim();
+    var failureTags = expandSignals((fc.trigger || []).concat(signalList), reason).filter(function (t) {
+      return t.indexOf('problem:') === 0 || t.indexOf('risk:') === 0 || t.indexOf('area:') === 0 || t.indexOf('action:') === 0;
+    });
+    if (failureTags.length === 0) continue;
+    var dominantProblem = null;
+    for (var p = 0; p < problemPriority.length; p++) {
+      if (failureTags.indexOf(problemPriority[p]) !== -1) {
+        dominantProblem = problemPriority[p];
+        break;
+      }
+    }
+    var groupingTags = dominantProblem
+      ? [dominantProblem]
+      : failureTags.filter(function (tag) { return tag.indexOf('area:') === 0 || tag.indexOf('risk:') === 0; }).slice(0, 1);
+    var key = groupingTags.join('|');
+    if (!groups[key]) groups[key] = { count: 0, tags: failureTags, reasons: [], gene: fc.gene || null };
+    groups[key].count += 1;
+    if (reason) groups[key].reasons.push(reason);
+  }
+
+  Object.keys(groups).forEach(function (key) {
+    var group = groups[key];
+    if (!group || group.count < 2) return;
+    var title = 'Learn from recurring failed evolution paths';
+    if (group.tags.indexOf('problem:performance') !== -1) title = 'Resolve recurring performance regressions';
+    else if (group.tags.indexOf('problem:protocol') !== -1) title = 'Prevent recurring protocol and validation regressions';
+    else if (group.tags.indexOf('problem:reliability') !== -1) title = 'Repair recurring reliability failures';
+    else if (group.tags.indexOf('problem:stagnation') !== -1) title = 'Break repeated stagnation loops with a new strategy';
+    else if (group.tags.indexOf('area:orchestration') !== -1) title = 'Stabilize task and orchestration behavior';
+    var evidence = 'Observed ' + group.count + ' recent failed evolutions with similar learning tags. ' +
+      (group.reasons[0] ? 'Latest reason: ' + clip(group.reasons[0], 180) : '');
+    candidates.push({
+      type: 'CapabilityCandidate',
+      id: 'cand_' + stableHash('failed:' + key),
+      title: title,
+      source: 'failed_capsules',
+      created_at: new Date().toISOString(),
+      signals: signalList,
+      tags: group.tags,
+      shape: buildFiveQuestionsShape({ title: title, signals: signalList, evidence: evidence }),
+    });
+  });
 
   // Dedup by id
   const seen = new Set();
@@ -138,5 +199,5 @@ function renderCandidatesPreview(candidates, maxChars = 1400) {
 module.exports = {
   extractCapabilityCandidates,
   renderCandidatesPreview,
+  expandSignals,
 };
-
