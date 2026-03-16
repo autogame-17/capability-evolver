@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync } = require('child_process');
-const { getRepoRoot, getMemoryDir, getSessionScope } = require('./gep/paths');
+const { getRepoRoot, getWorkspaceRoot, getMemoryDir, getSessionScope } = require('./gep/paths');
 const { extractSignals } = require('./gep/signals');
 const {
   loadGenes,
@@ -492,7 +492,7 @@ function clearDormantHypothesis() {
 }
 // Read MEMORY.md and USER.md from the WORKSPACE root (not the evolver plugin dir).
 // This avoids symlink breakage if the target file is temporarily deleted.
-const WORKSPACE_ROOT = process.env.OPENCLAW_WORKSPACE || path.resolve(REPO_ROOT, '../..');
+const WORKSPACE_ROOT = getWorkspaceRoot();
 const ROOT_MEMORY = path.join(WORKSPACE_ROOT, 'MEMORY.md');
 const DIR_MEMORY = path.join(MEMORY_DIR, 'MEMORY.md');
 const MEMORY_FILE = fs.existsSync(ROOT_MEMORY) ? ROOT_MEMORY : (fs.existsSync(DIR_MEMORY) ? DIR_MEMORY : ROOT_MEMORY);
@@ -1532,7 +1532,6 @@ async function run() {
   try {
     const runId = `run_${Date.now()}`;
     const parentEventId = getLastEventId();
-    const selectedBy = memoryAdvice && memoryAdvice.preferredGeneId ? 'memory_graph+selector' : 'selector';
 
     // Baseline snapshot (before any edits).
     let baselineUntracked = [];

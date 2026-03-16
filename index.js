@@ -2,8 +2,8 @@
 const evolve = require('./src/evolve');
 const { solidify } = require('./src/gep/solidify');
 const path = require('path');
-// Hardened Env Loading: Ensure .env is loaded before anything else
-try { require('dotenv').config({ path: path.resolve(__dirname, '../../.env') }); } catch (e) { console.warn('[Evolver] Warning: dotenv not found or failed to load .env'); }
+const { getRepoRoot } = require('./src/gep/paths');
+try { require('dotenv').config({ path: path.join(getRepoRoot(), '.env') }); } catch (e) { console.warn('[Evolver] Warning: dotenv not found or failed to load .env'); }
 const fs = require('fs');
 const { spawn } = require('child_process');
 
@@ -39,7 +39,9 @@ function rejectPendingRun(statePath) {
         reason: 'loop_bridge_disabled_autoreject_no_rollback',
         timestamp: new Date().toISOString(),
       };
-      fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf8');
+      const tmp = `${statePath}.tmp`;
+      fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf8');
+      fs.renameSync(tmp, statePath);
       return true;
     }
   } catch (e) {
@@ -125,8 +127,10 @@ async function main() {
         process.on('SIGTERM', () => { releaseLock(); process.exit(); });
 
         process.env.EVOLVE_LOOP = 'true';
-        process.env.EVOLVE_BRIDGE = 'false';
-        console.log('Loop mode enabled (internal daemon).');
+        if (!process.env.EVOLVE_BRIDGE) {
+          process.env.EVOLVE_BRIDGE = 'false';
+        }
+        console.log(`Loop mode enabled (internal daemon, bridge=${process.env.EVOLVE_BRIDGE}).`);
 
         const { getEvolutionDir } = require('./src/gep/paths');
         const solidifyStatePath = path.join(getEvolutionDir(), 'evolution_solidify_state.json');

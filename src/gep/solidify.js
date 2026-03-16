@@ -383,12 +383,12 @@ function readStateForSolidify() {
 }
 
 function writeStateForSolidify(state) {
-  const memoryDir = getMemoryDir();
-  const statePath = path.join(getEvolutionDir(), 'evolution_solidify_state.json');
+  const evolutionDir = getEvolutionDir();
+  const statePath = path.join(evolutionDir, 'evolution_solidify_state.json');
   try {
-    if (!fs.existsSync(memoryDir)) fs.mkdirSync(memoryDir, { recursive: true });
+    if (!fs.existsSync(evolutionDir)) fs.mkdirSync(evolutionDir, { recursive: true });
   } catch (e) {
-    console.warn('[evolver] writeStateForSolidify mkdir failed:', memoryDir, e && e.message || e);
+    console.warn('[evolver] writeStateForSolidify mkdir failed:', evolutionDir, e && e.message || e);
   }
   const tmp = `${statePath}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf8');
