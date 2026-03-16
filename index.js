@@ -26,23 +26,12 @@ function readJsonSafe(p) {
 
 function rejectPendingRun(statePath) {
   try {
-    const { getRepoRoot } = require('./src/gep/paths');
-    const { execSync } = require('child_process');
-    const repoRoot = getRepoRoot();
-
-    execSync('git checkout -- .', { cwd: repoRoot, encoding: 'utf8', timeout: 30000 });
-    execSync('git clean -fd', { cwd: repoRoot, encoding: 'utf8', timeout: 30000 });
-  } catch (e) {
-    console.warn('[Loop] Pending run rollback failed: ' + (e.message || e));
-  }
-
-  try {
     const state = readJsonSafe(statePath);
     if (state && state.last_run && state.last_run.run_id) {
       state.last_solidify = {
         run_id: state.last_run.run_id,
         rejected: true,
-        reason: 'loop_bridge_disabled_autoreject',
+        reason: 'loop_bridge_disabled_autoreject_no_rollback',
         timestamp: new Date().toISOString(),
       };
       fs.writeFileSync(statePath, JSON.stringify(state, null, 2) + '\n', 'utf8');
@@ -184,7 +173,7 @@ async function main() {
               if (isPendingSolidify(stAfterRun)) {
                 const cleared = rejectPendingRun(solidifyStatePath);
                 if (cleared) {
-                  console.warn('[Loop] Auto-rejected pending run because bridge is disabled in loop mode.');
+                  console.warn('[Loop] Auto-rejected pending run because bridge is disabled in loop mode (state only, no rollback).');
                 }
               }
             }
@@ -528,3 +517,10 @@ async function main() {
 if (require.main === module) {
   main();
 }
+
+module.exports = {
+  main,
+  readJsonSafe,
+  rejectPendingRun,
+  isPendingSolidify,
+};
