@@ -610,14 +610,18 @@ function getNextCycleId() {
     if (fs.existsSync(STATE_FILE)) {
       state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[Evolve] Failed to read state file:', e && e.message || e);
+  }
 
   state.cycleCount = (state.cycleCount || 0) + 1;
   state.lastRun = Date.now();
 
   try {
     fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
-  } catch (e) {}
+  } catch (e) {
+    console.warn('[Evolve] Failed to write state file:', e && e.message || e);
+  }
 
   return String(state.cycleCount).padStart(4, '0');
 }

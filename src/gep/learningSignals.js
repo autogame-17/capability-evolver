@@ -11,17 +11,17 @@ function add(tags, value) {
 }
 
 function expandSignals(signals, extraText) {
-  var raw = Array.isArray(signals) ? signals.map(function (s) { return String(s); }) : [];
-  var tags = [];
+  const raw = Array.isArray(signals) ? signals.map(function (s) { return String(s); }) : [];
+  const tags = [];
 
-  for (var i = 0; i < raw.length; i++) {
-    var signal = raw[i];
+  for (let i = 0; i < raw.length; i++) {
+    const signal = raw[i];
     add(tags, signal);
-    var base = signal.split(':')[0];
+    const base = signal.split(':')[0];
     if (base && base !== signal) add(tags, base);
   }
 
-  var text = (raw.join(' ') + ' ' + String(extraText || '')).toLowerCase();
+  const text = (raw.join(' ') + ' ' + String(extraText || '')).toLowerCase();
 
   if (/(error|exception|failed|unstable|log_error|runtime|429)/.test(text)) {
     add(tags, 'problem:reliability');
@@ -62,7 +62,7 @@ function expandSignals(signals, extraText) {
 
 function geneTags(gene) {
   if (!gene || typeof gene !== 'object') return [];
-  var inputs = [];
+  let inputs = [];
   if (gene.category) inputs.push('action:' + String(gene.category).toLowerCase());
   if (Array.isArray(gene.signals_match)) inputs = inputs.concat(gene.signals_match);
   if (typeof gene.id === 'string') inputs.push(gene.id);
@@ -71,12 +71,12 @@ function geneTags(gene) {
 }
 
 function scoreTagOverlap(gene, signals) {
-  var signalTags = expandSignals(signals, '');
-  var geneTagList = geneTags(gene);
+  const signalTags = expandSignals(signals, '');
+  const geneTagList = geneTags(gene);
   if (signalTags.length === 0 || geneTagList.length === 0) return 0;
-  var signalSet = new Set(signalTags);
-  var hits = 0;
-  for (var i = 0; i < geneTagList.length; i++) {
+  const signalSet = new Set(signalTags);
+  let hits = 0;
+  for (let i = 0; i < geneTagList.length; i++) {
     if (signalSet.has(geneTagList[i])) hits++;
   }
   return hits;

@@ -237,7 +237,8 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
       /加个|实现一下|做个|想要\s*一个|需要\s*一个|帮我加|帮我开发|加一下|新增一个|加个功能|做个功能|我想/.test(corpus) ||
       /加個|實現一下|做個|想要一個|請加|新增一個|加個功能|做個功能|幫我加/.test(corpus) ||
       /追加|実装|作って|機能を|追加して|が欲しい|を追加|してほしい/.test(corpus)) {
-    signals.push('user_feature_request:' + (featureRequestSnippet || ''));
+    signals.push('user_feature_request');
+    if (featureRequestSnippet) signals.push('user_feature_request:' + featureRequestSnippet);
   }
 
   // user_improvement_suggestion: 4 languages + snippet
@@ -263,7 +264,8 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
       /改進一下|優化一下|簡化|重構|整理一下|弄得更好/.test(corpus) ||
       /改善|最適化|簡素化|リファクタ|良くして|改良/.test(corpus);
     if (hasImprovement) {
-      signals.push('user_improvement_suggestion:' + (improvementSnippet || ''));
+      signals.push('user_improvement_suggestion');
+      if (improvementSnippet) signals.push('user_improvement_suggestion:' + improvementSnippet);
     }
   }
 

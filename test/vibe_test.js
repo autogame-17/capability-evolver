@@ -275,9 +275,10 @@ run('T4b', 'innovation_signal', function () {
   var cat3 = mutation.buildMutation({ signals: ['log_error', 'user_feature_request'], driftEnabled: false });
   assert(cat3.category === 'repair', 'mutation category should be repair when log_error is present even with opportunity signal, got: ' + cat3.category);
 
-  // Test 8: no signals -> optimize (not innovate)
+  // Test 8: no signals -> depends on strategy preset (balanced: innovate >= 0.5 -> innovate; otherwise optimize)
   var cat4 = mutation.buildMutation({ signals: [], driftEnabled: false });
-  assert(cat4.category === 'optimize', 'mutation category should be optimize with no signals, got: ' + cat4.category);
+  assert(cat4.category === 'innovate' || cat4.category === 'optimize',
+    'mutation category should be innovate or optimize with no signals, got: ' + cat4.category);
 
   // Test 9: hasOpportunitySignal utility
   assert(mutation.hasOpportunitySignal(['user_feature_request']) === true, 'hasOpportunitySignal should return true');
@@ -617,10 +618,14 @@ run('T10', 'a2a_ingest_promote', function () {
 
 run('T11', 'selector_gene_match', function () {
   var selector = require(path.join(SKILL_ROOT, 'src/gep/selector'));
-  var assetStore = require(path.join(SKILL_ROOT, 'src/gep/assetStore'));
 
-  var genes = assetStore.loadGenes();
-  var capsules = assetStore.loadCapsules();
+  // Deterministic test genes (isolated from T5 side effects on genes.json)
+  var genes = [
+    { type: 'Gene', id: 'gene_test_repair', category: 'repair', signals_match: ['log_error', 'error', 'exception', 'runtime'], summary: 'Test repair gene', strategy: ['Step 1'] },
+    { type: 'Gene', id: 'gene_test_optimize', category: 'optimize', signals_match: ['protocol', 'prompt', 'audit', 'gep'], summary: 'Test optimize gene', strategy: ['Step 1'] },
+    { type: 'Gene', id: 'gene_test_innovate', category: 'innovate', signals_match: ['user_feature_request', 'capability_gap', 'perf_bottleneck'], summary: 'Test innovate gene', strategy: ['Step 1'] },
+  ];
+  var capsules = [];
 
   // log_error should select repair gene
   var r1 = selector.selectGeneAndCapsule({

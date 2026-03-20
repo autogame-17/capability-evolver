@@ -18,7 +18,7 @@ const MAX_LOG_CHARS = 2000;
 const MAX_EVENTS = 5;
 
 function getConfig() {
-  var enabled = String(process.env.EVOLVER_AUTO_ISSUE || 'true').toLowerCase();
+  const enabled = String(process.env.EVOLVER_AUTO_ISSUE || 'true').toLowerCase();
   if (enabled === 'false' || enabled === '0') return null;
   return {
     repo: process.env.EVOLVER_ISSUE_REPO || DEFAULT_REPO,
@@ -37,7 +37,7 @@ function getStatePath() {
 
 function readState() {
   try {
-    var p = getStatePath();
+    const p = getStatePath();
     if (fs.existsSync(p)) {
       return JSON.parse(fs.readFileSync(p, 'utf8'));
     }
@@ -47,7 +47,7 @@ function readState() {
 
 function writeState(state) {
   try {
-    var dir = getEvolutionDir();
+    const dir = getEvolutionDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(getStatePath(), JSON.stringify(state, null, 2) + '\n');
   } catch (_) {}
@@ -60,7 +60,7 @@ function truncateNodeId(nodeId) {
 }
 
 function computeErrorKey(signals) {
-  var relevant = signals
+  const relevant = signals
     .filter(function (s) {
       return s.startsWith('recurring_errsig') ||
         s.startsWith('ban_gene:') ||
@@ -74,19 +74,19 @@ function computeErrorKey(signals) {
 }
 
 function extractErrorSignature(signals) {
-  var errSig = signals.find(function (s) { return s.startsWith('recurring_errsig'); });
+  const errSig = signals.find(function (s) { return s.startsWith('recurring_errsig'); });
   if (errSig) {
     return errSig.replace(/^recurring_errsig\(\d+x\):/, '').trim().slice(0, 200);
   }
-  var banned = signals.find(function (s) { return s.startsWith('ban_gene:'); });
+  const banned = signals.find(function (s) { return s.startsWith('ban_gene:'); });
   if (banned) return 'Repeated failures with gene: ' + banned.replace('ban_gene:', '');
   return 'Persistent evolution failure';
 }
 
 function extractStreakCount(signals) {
-  for (var i = 0; i < signals.length; i++) {
+  for (let i = 0; i < signals.length; i++) {
     if (signals[i].startsWith('consecutive_failure_streak_')) {
-      var n = parseInt(signals[i].replace('consecutive_failure_streak_', ''), 10);
+      const n = parseInt(signals[i].replace('consecutive_failure_streak_', ''), 10);
       if (Number.isFinite(n)) return n;
     }
   }
@@ -95,12 +95,12 @@ function extractStreakCount(signals) {
 
 function formatRecentEvents(events) {
   if (!Array.isArray(events) || events.length === 0) return '_No recent events available._';
-  var failed = events.filter(function (e) { return e && e.outcome && e.outcome.status === 'failed'; });
-  var rows = failed.slice(-MAX_EVENTS).map(function (e, idx) {
-    var intent = e.intent || '-';
-    var gene = (Array.isArray(e.genes_used) && e.genes_used[0]) || '-';
-    var outcome = (e.outcome && e.outcome.status) || '-';
-    var reason = (e.outcome && e.outcome.reason) || '';
+  const failed = events.filter(function (e) { return e && e.outcome && e.outcome.status === 'failed'; });
+  const rows = failed.slice(-MAX_EVENTS).map(function (e, idx) {
+    const intent = e.intent || '-';
+    const gene = (Array.isArray(e.genes_used) && e.genes_used[0]) || '-';
+    const outcome = (e.outcome && e.outcome.status) || '-';
+    let reason = (e.outcome && e.outcome.reason) || '';
     if (reason.length > 80) reason = reason.slice(0, 80) + '...';
     reason = redactString(reason);
     return '| ' + (idx + 1) + ' | ' + intent + ' | ' + gene + ' | ' + outcome + ' | ' + reason + ' |';
@@ -110,15 +110,15 @@ function formatRecentEvents(events) {
 }
 
 function buildIssueBody(opts) {
-  var fp = opts.envFingerprint || captureEnvFingerprint();
-  var signals = opts.signals || [];
-  var recentEvents = opts.recentEvents || [];
-  var sessionLog = opts.sessionLog || '';
-  var streakCount = extractStreakCount(signals);
-  var errorSig = extractErrorSignature(signals);
-  var nodeId = truncateNodeId(getNodeId());
+  const fp = opts.envFingerprint || captureEnvFingerprint();
+  const signals = opts.signals || [];
+  const recentEvents = opts.recentEvents || [];
+  const sessionLog = opts.sessionLog || '';
+  const streakCount = extractStreakCount(signals);
+  const errorSig = extractErrorSignature(signals);
+  const nodeId = truncateNodeId(getNodeId());
 
-  var failureSignals = signals.filter(function (s) {
+  const failureSignals = signals.filter(function (s) {
     return s.startsWith('recurring_') ||
       s.startsWith('consecutive_failure') ||
       s.startsWith('failure_loop') ||
@@ -127,17 +127,17 @@ function buildIssueBody(opts) {
       s === 'force_innovation_after_repair_loop';
   }).join(', ');
 
-  var sanitizedLog = redactString(
+  const sanitizedLog = redactString(
     typeof sessionLog === 'string' ? sessionLog.slice(-MAX_LOG_CHARS) : ''
   );
 
-  var eventsTable = formatRecentEvents(recentEvents);
+  const eventsTable = formatRecentEvents(recentEvents);
 
-  var reportId = crypto.createHash('sha256')
+  const reportId = crypto.createHash('sha256')
     .update(nodeId + '|' + Date.now() + '|' + errorSig)
     .digest('hex').slice(0, 12);
 
-  var body = [
+  const body = [
     '## Environment',
     '- **Evolver Version:** ' + (fp.evolver_version || 'unknown'),
     '- **Node.js:** ' + (fp.node_version || process.version),
@@ -172,21 +172,21 @@ function buildIssueBody(opts) {
 function shouldReport(signals, config) {
   if (!config) return false;
 
-  var hasFailureLoop = signals.includes('failure_loop_detected');
-  var hasRecurringAndHigh = signals.includes('recurring_error') && signals.includes('high_failure_ratio');
+  const hasFailureLoop = signals.includes('failure_loop_detected');
+  const hasRecurringAndHigh = signals.includes('recurring_error') && signals.includes('high_failure_ratio');
 
   if (!hasFailureLoop && !hasRecurringAndHigh) return false;
 
-  var streakCount = extractStreakCount(signals);
+  const streakCount = extractStreakCount(signals);
   if (streakCount > 0 && streakCount < config.minStreak) return false;
 
-  var state = readState();
-  var errorKey = computeErrorKey(signals);
+  const state = readState();
+  const errorKey = computeErrorKey(signals);
 
   if (state.lastReportedAt) {
-    var elapsed = Date.now() - new Date(state.lastReportedAt).getTime();
+    const elapsed = Date.now() - new Date(state.lastReportedAt).getTime();
     if (elapsed < config.cooldownMs) {
-      var recentKeys = Array.isArray(state.recentIssueKeys) ? state.recentIssueKeys : [];
+      const recentKeys = Array.isArray(state.recentIssueKeys) ? state.recentIssueKeys : [];
       if (recentKeys.includes(errorKey)) {
         return false;
       }
@@ -197,8 +197,8 @@ function shouldReport(signals, config) {
 }
 
 async function createGithubIssue(repo, title, body, token) {
-  var url = 'https://api.github.com/repos/' + repo + '/issues';
-  var response = await fetch(url, {
+  const url = 'https://api.github.com/repos/' + repo + '/issues';
+  const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Authorization': 'Bearer ' + token,
@@ -211,41 +211,41 @@ async function createGithubIssue(repo, title, body, token) {
   });
 
   if (!response.ok) {
-    var errText = '';
+    let errText = '';
     try { errText = await response.text(); } catch (_) {}
     throw new Error('GitHub API ' + response.status + ': ' + errText.slice(0, 200));
   }
 
-  var data = await response.json();
+  const data = await response.json();
   return { number: data.number, url: data.html_url };
 }
 
 async function maybeReportIssue(opts) {
-  var config = getConfig();
+  const config = getConfig();
   if (!config) return;
 
-  var signals = opts.signals || [];
+  const signals = opts.signals || [];
 
   if (!shouldReport(signals, config)) return;
 
-  var token = getGithubToken();
+  const token = getGithubToken();
   if (!token) {
     console.log('[IssueReporter] No GitHub token available. Skipping auto-report.');
     return;
   }
 
-  var errorSig = extractErrorSignature(signals);
-  var titleSig = errorSig.slice(0, 80);
-  var title = '[Auto] Recurring failure: ' + titleSig;
-  var body = buildIssueBody(opts);
+  const errorSig = extractErrorSignature(signals);
+  const titleSig = errorSig.slice(0, 80);
+  const title = '[Auto] Recurring failure: ' + titleSig;
+  const body = buildIssueBody(opts);
 
   try {
-    var result = await createGithubIssue(config.repo, title, body, token);
+    const result = await createGithubIssue(config.repo, title, body, token);
     console.log('[IssueReporter] Created GitHub issue #' + result.number + ': ' + result.url);
 
-    var state = readState();
-    var errorKey = computeErrorKey(signals);
-    var recentKeys = Array.isArray(state.recentIssueKeys) ? state.recentIssueKeys : [];
+    const state = readState();
+    const errorKey = computeErrorKey(signals);
+    let recentKeys = Array.isArray(state.recentIssueKeys) ? state.recentIssueKeys : [];
     recentKeys.push(errorKey);
     if (recentKeys.length > 20) recentKeys = recentKeys.slice(-20);
     writeState({

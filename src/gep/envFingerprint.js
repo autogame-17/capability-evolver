@@ -52,6 +52,7 @@ function captureEnvFingerprint() {
     region: region,
     cwd: crypto.createHash('sha256').update(process.cwd()).digest('hex').slice(0, 12),
     container: isContainer(),
+    captured_at: new Date().toISOString(),
   };
 }
 

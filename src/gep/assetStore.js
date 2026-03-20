@@ -283,16 +283,16 @@ function upsertCapsule(capsuleObj) {
   writeJsonAtomic(capsulesPath(), { version: current.version || 1, capsules });
 }
 
-var FAILED_CAPSULES_MAX = 200;
-var FAILED_CAPSULES_TRIM_TO = 100;
+const FAILED_CAPSULES_MAX = 200;
+const FAILED_CAPSULES_TRIM_TO = 100;
 
 function getDefaultFailedCapsules() { return { version: 1, failed_capsules: [] }; }
 
 function appendFailedCapsule(capsuleObj) {
   if (!capsuleObj || typeof capsuleObj !== 'object') return;
   ensureSchemaFields(capsuleObj);
-  var current = readJsonIfExists(failedCapsulesPath(), getDefaultFailedCapsules());
-  var list = Array.isArray(current.failed_capsules) ? current.failed_capsules : [];
+  const current = readJsonIfExists(failedCapsulesPath(), getDefaultFailedCapsules());
+  let list = Array.isArray(current.failed_capsules) ? current.failed_capsules : [];
   list.push(capsuleObj);
   if (list.length > FAILED_CAPSULES_MAX) {
     list = list.slice(list.length - FAILED_CAPSULES_TRIM_TO);
@@ -301,10 +301,10 @@ function appendFailedCapsule(capsuleObj) {
 }
 
 function readRecentFailedCapsules(limit) {
-  var n = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 50;
+  const n = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Number(limit) : 50;
   try {
-    var current = readJsonIfExists(failedCapsulesPath(), getDefaultFailedCapsules());
-    var list = Array.isArray(current.failed_capsules) ? current.failed_capsules : [];
+    const current = readJsonIfExists(failedCapsulesPath(), getDefaultFailedCapsules());
+    const list = Array.isArray(current.failed_capsules) ? current.failed_capsules : [];
     return list.slice(Math.max(0, list.length - n));
   } catch (e) {
     console.warn('[AssetStore] Failed to read failed_capsules.json:', e && e.message || e);
