@@ -46,7 +46,10 @@ function getWorkspaceRoot() {
     return workspaceDir;
   }
 
-  return path.resolve(__dirname, '..', '..', '..', '..');
+  // Standalone / Cursor / non-OpenClaw: use the repo root itself as workspace.
+  // The old 4-level-up fallback assumed OpenClaw's skill directory layout
+  // (/workspace/skills/evolver/) which resolves incorrectly in other environments.
+  return repoRoot;
 }
 
 function getLogsDir() {

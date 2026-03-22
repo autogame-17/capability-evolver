@@ -106,11 +106,11 @@ metadata:
       - "workspace/src/** (evolved code, only when changes are solidified)"
 ---
 
-# 🧬 Capability Evolver
+# 🧬 Evolver
 
 **"Evolution is not optional. Adapt or die."**
 
-The **Capability Evolver** is a meta-skill that allows OpenClaw agents to inspect their own runtime history, identify failures or inefficiencies, and autonomously write new code or update their own memory to improve performance.
+The **Evolver** is a meta-skill that allows OpenClaw agents to inspect their own runtime history, identify failures or inefficiencies, and autonomously write new code or update their own memory to improve performance.
 
 ## Features
 

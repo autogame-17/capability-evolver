@@ -850,8 +850,16 @@ function getRecentActiveSessionCount(windowMs) {
   } catch (_) { return 0; }
 }
 
+function determineBridgeEnabled() {
+  const bridgeExplicit = process.env.EVOLVE_BRIDGE;
+  if (bridgeExplicit !== undefined && bridgeExplicit !== '') {
+    return String(bridgeExplicit).toLowerCase() !== 'false';
+  }
+  return Boolean(process.env.OPENCLAW_WORKSPACE);
+}
+
 async function run() {
-  const bridgeEnabled = String(process.env.EVOLVE_BRIDGE || '').toLowerCase() !== 'false';
+  const bridgeEnabled = determineBridgeEnabled();
   const loopMode = ARGS.includes('--loop') || ARGS.includes('--mad-dog') || String(process.env.EVOLVE_LOOP || '').toLowerCase() === 'true';
 
   // SAFEGUARD: If another evolver Hand Agent is already running, back off.
@@ -1918,5 +1926,5 @@ ${mutationDirective}
   }
 }
 
-module.exports = { run, computeAdaptiveStrategyPolicy, shouldSkipHubCalls, verbose };
+module.exports = { run, computeAdaptiveStrategyPolicy, shouldSkipHubCalls, verbose, determineBridgeEnabled };
 

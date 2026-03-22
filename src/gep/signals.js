@@ -175,7 +175,9 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
   if (lower.includes('user.md missing')) signals.push('user_missing');
   if (lower.includes('key missing')) signals.push('integration_key_missing');
   if (lower.includes('no session logs found') || lower.includes('no jsonl files')) signals.push('session_logs_missing');
-  // if (lower.includes('pgrep') || lower.includes('ps aux')) signals.push('windows_shell_incompatible');
+  if (process.platform === 'win32' && (lower.includes('pgrep') || lower.includes('ps aux') || lower.includes('cat >') || lower.includes('heredoc'))) {
+    signals.push('windows_shell_incompatible');
+  }
   if (lower.includes('path.resolve(__dirname, \'../../../')) signals.push('path_outside_workspace');
 
   // Protocol-specific drift signals

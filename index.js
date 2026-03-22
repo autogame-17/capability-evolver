@@ -109,7 +109,7 @@ async function main() {
     String(process.env.EVOLVER_VERBOSE || '').toLowerCase() === 'true';
   if (isVerbose) process.env.EVOLVER_VERBOSE = 'true';
 
-  if (command === 'run' || command === '/evolve' || isLoop) {
+  if (!command || command === 'run' || command === '/evolve' || isLoop) {
     if (isLoop) {
         const originalLog = console.log;
         const originalWarn = console.warn;
@@ -120,7 +120,7 @@ async function main() {
         console.error = (...args) => { originalError.call(console, ts(), ...args); };
     }
 
-    console.log('Starting capability evolver...');
+    console.log('Starting evolver...');
     
     if (isLoop) {
         // Internal daemon loop (no wrapper required).
@@ -263,8 +263,8 @@ async function main() {
 
     // Post-run hint
     console.log('\n' + '=======================================================');
-    console.log('Capability evolver finished. If you use this project, consider starring the upstream repository.');
-    console.log('Upstream: https://github.com/autogame-17/capability-evolver');
+    console.log('Evolver finished. If you use this project, consider starring the upstream repository.');
+    console.log('Upstream: https://github.com/EvoMap/evolver');
     console.log('=======================================================\n');
     
   } else if (command === 'solidify') {
