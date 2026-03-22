@@ -105,6 +105,9 @@ async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
   const isLoop = args.includes('--loop') || args.includes('--mad-dog');
+  const isVerbose = args.includes('--verbose') || args.includes('-v') ||
+    String(process.env.EVOLVER_VERBOSE || '').toLowerCase() === 'true';
+  if (isVerbose) process.env.EVOLVER_VERBOSE = 'true';
 
   if (command === 'run' || command === '/evolve' || isLoop) {
     if (isLoop) {
@@ -130,7 +133,7 @@ async function main() {
         if (!process.env.EVOLVE_BRIDGE) {
           process.env.EVOLVE_BRIDGE = 'false';
         }
-        console.log(`Loop mode enabled (internal daemon, bridge=${process.env.EVOLVE_BRIDGE}).`);
+        console.log(`Loop mode enabled (internal daemon, bridge=${process.env.EVOLVE_BRIDGE}, verbose=${isVerbose}).`);
 
         const { getEvolutionDir } = require('./src/gep/paths');
         const solidifyStatePath = path.join(getEvolutionDir(), 'evolution_solidify_state.json');
@@ -236,7 +239,12 @@ async function main() {
 
           // Jitter to avoid lockstep restarts.
           const jitter = Math.floor(Math.random() * 250);
-          await sleepMs((currentSleepMs + jitter) * saturationMultiplier);
+          const totalSleepMs = (currentSleepMs + jitter) * saturationMultiplier;
+          if (isVerbose) {
+            const memMb = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
+            console.log(`[Verbose] cycle=${cycleCount} ok=${ok} dt=${dt}ms sleep=${totalSleepMs}ms (base=${currentSleepMs} jitter=${jitter} sat=${saturationMultiplier}x) rss=${memMb}MB signals=[${(function() { try { var st = readJsonSafe(solidifyStatePath); return st && st.last_run && Array.isArray(st.last_run.signals) ? st.last_run.signals.join(',') : ''; } catch(e) { return ''; } })()}]`);
+          }
+          await sleepMs(totalSleepMs);
 
           } catch (loopErr) {
             console.error('[Daemon] Unexpected loop error (recovering): ' + (loopErr && loopErr.message ? loopErr.message : String(loopErr)));

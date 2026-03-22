@@ -44,6 +44,14 @@ const { expandSignals } = require('./gep/learningSignals');
 
 const REPO_ROOT = getRepoRoot();
 
+// Verbose logging helper. Checks EVOLVER_VERBOSE env var (set by --verbose flag in index.js).
+function verbose() {
+  if (String(process.env.EVOLVER_VERBOSE || '').toLowerCase() !== 'true') return;
+  var args = Array.prototype.slice.call(arguments);
+  args.unshift('[Verbose]');
+  console.log.apply(console, args);
+}
+
 // Idle-cycle gating: track last Hub fetch to avoid redundant API calls during saturation.
 // When evolver is saturated (no actionable signals), Hub calls are throttled to at most
 // once per EVOLVER_IDLE_FETCH_INTERVAL_MS (default 30 min) instead of every cycle.
@@ -973,6 +981,9 @@ async function run() {
   }
 
   const startTime = Date.now();
+  verbose('--- evolve.run() start ---');
+  verbose('Config: EVOLVE_STRATEGY=' + (process.env.EVOLVE_STRATEGY || '(default)') + ' EVOLVE_BRIDGE=' + (process.env.EVOLVE_BRIDGE || '(default)') + ' EVOLVE_LOOP=' + (process.env.EVOLVE_LOOP || 'false'));
+  verbose('Config: EVOLVER_IDLE_FETCH_INTERVAL_MS=' + (process.env.EVOLVER_IDLE_FETCH_INTERVAL_MS || '(default 1800000)') + ' RANDOM_DRIFT=' + (process.env.RANDOM_DRIFT || 'false'));
   console.log('Scanning session logs...');
 
   // Ensure all GEP asset files exist before any operation.
@@ -1170,6 +1181,9 @@ async function run() {
     userSnippet,
     recentEvents,
   });
+
+  verbose('Signals extracted (' + signals.length + '):', signals.join(', '));
+  verbose('Recent events: ' + recentEvents.length + ', session log size: ' + recentMasterLog.length + ' chars');
 
   if (dormantHypothesis && Array.isArray(dormantHypothesis.signals) && dormantHypothesis.signals.length > 0) {
     var dormantSignals = dormantHypothesis.signals;
@@ -1567,6 +1581,12 @@ async function run() {
     signals,
   });
 
+  verbose('Gene selection: gene=' + (selectedGene ? selectedGene.id : '(none)') + ' capsule=' + (selectedCapsuleId || '(none)') + ' selectedBy=' + selectedBy + ' selector=' + (selector || '(none)'));
+  verbose('Strategy policy: name=' + strategyPolicy.name + ' forceInnovate=' + strategyPolicy.forceInnovate + ' cautious=' + strategyPolicy.cautiousExecution + ' maxFiles=' + strategyPolicy.blastRadiusMaxFiles);
+  if (memoryAdvice) {
+    verbose('Memory advice: preferred=' + (memoryAdvice.preferredGeneId || '(none)') + ' banned=[' + (Array.isArray(memoryAdvice.bannedGeneIds) ? memoryAdvice.bannedGeneIds.join(',') : '') + ']');
+  }
+
   // Personality selection (natural selection + small mutation when triggered).
   // This state is persisted in MEMORY_DIR and is treated as an evolution control surface (not role-play).
   const personalitySelection = selectPersonalityForRun({
@@ -1618,6 +1638,9 @@ async function run() {
     personalityState,
     allowHighRisk,
   });
+
+  verbose('Mutation: category=' + (mutation && mutation.category || '?') + ' risk=' + (mutation && mutation.risk_level || '?') + ' innovateMode=' + mutationInnovateMode + ' forceInnovation=' + forceInnovation + ' allowHighRisk=' + allowHighRisk);
+  verbose('Hub: hubHit=' + (hubHit && hubHit.hit ? 'true (score=' + hubHit.score + ' mode=' + hubHit.mode + ')' : 'false (' + (hubHit && hubHit.reason || 'unknown') + ')'));
 
   // Memory Graph: record hypothesis bridging Signal -> Action. If this fails, refuse to evolve.
   let hypothesisId = null;
@@ -1970,5 +1993,5 @@ ${mutationDirective}
   }
 }
 
-module.exports = { run, computeAdaptiveStrategyPolicy, shouldSkipHubCalls };
+module.exports = { run, computeAdaptiveStrategyPolicy, shouldSkipHubCalls, verbose };
 
