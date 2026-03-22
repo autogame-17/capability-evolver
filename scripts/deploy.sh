@@ -100,7 +100,7 @@ node scripts/publish_public.js 2>&1 || echo "  (GitHub release done, ClawHub may
 # --- Step 6: Publish ClawHub ---
 echo "[6/8] Publishing to ClawHub..."
 clawhub publish "$REPO_ROOT/dist-public" --slug evolver --name "Evolver" --version "$NEW_VERSION" --changelog "v$NEW_VERSION" --tags latest 2>&1 || echo "  (evolver publish failed)"
-clawhub publish "$REPO_ROOT/dist-public" --slug capability-evolver --name "Capability Evolver" --version "$NEW_VERSION" --changelog "v$NEW_VERSION" --tags latest 2>&1 || echo "  (capability-evolver publish failed)"
+clawhub publish "$REPO_ROOT/dist-public" --slug capability-evolver --name "Evolver" --version "$NEW_VERSION" --changelog "v$NEW_VERSION" --tags latest 2>&1 || echo "  (capability-evolver publish failed)"
 
 # --- Step 7: Publish npm ---
 echo "[7/8] Publishing to npm (@evomap/evolver)..."

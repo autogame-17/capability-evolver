@@ -191,9 +191,11 @@ describe('getGepAssetsDir', () => {
 
 describe('getWorkspaceRoot', () => {
   let saved = {};
+  let tmpDir;
   const envKeys = ['OPENCLAW_WORKSPACE', 'EVOLVER_REPO_ROOT'];
 
   beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-test-'));
     for (const k of envKeys) { saved[k] = process.env[k]; delete process.env[k]; }
   });
 
@@ -202,6 +204,7 @@ describe('getWorkspaceRoot', () => {
       if (saved[k] === undefined) delete process.env[k];
       else process.env[k] = saved[k];
     }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it('returns OPENCLAW_WORKSPACE when set', () => {
@@ -214,5 +217,46 @@ describe('getWorkspaceRoot', () => {
     const { getWorkspaceRoot } = freshRequire('../src/gep/paths');
     const result = getWorkspaceRoot();
     assert.ok(typeof result === 'string' && result.length > 0);
+  });
+
+  it('returns repoRoot when no workspace/ dir exists (standalone/Cursor fix)', () => {
+    process.env.EVOLVER_REPO_ROOT = tmpDir;
+    const { getWorkspaceRoot, getRepoRoot } = freshRequire('../src/gep/paths');
+    assert.equal(getWorkspaceRoot(), getRepoRoot());
+  });
+
+  it('does NOT resolve to a directory above repoRoot', () => {
+    process.env.EVOLVER_REPO_ROOT = tmpDir;
+    const { getWorkspaceRoot } = freshRequire('../src/gep/paths');
+    const wsRoot = getWorkspaceRoot();
+    assert.ok(
+      wsRoot.startsWith(tmpDir),
+      'workspaceRoot should be at or below repoRoot, got: ' + wsRoot
+    );
+  });
+
+  it('returns workspace/ subdirectory when it exists inside repoRoot', () => {
+    process.env.EVOLVER_REPO_ROOT = tmpDir;
+    const wsDir = path.join(tmpDir, 'workspace');
+    fs.mkdirSync(wsDir);
+    const { getWorkspaceRoot } = freshRequire('../src/gep/paths');
+    assert.equal(getWorkspaceRoot(), wsDir);
+  });
+
+  it('OPENCLAW_WORKSPACE takes precedence over workspace/ dir', () => {
+    process.env.EVOLVER_REPO_ROOT = tmpDir;
+    process.env.OPENCLAW_WORKSPACE = '/override/path';
+    fs.mkdirSync(path.join(tmpDir, 'workspace'));
+    const { getWorkspaceRoot } = freshRequire('../src/gep/paths');
+    assert.equal(getWorkspaceRoot(), '/override/path');
+  });
+
+  it('derived paths (memoryDir, logsDir, skillsDir) resolve under workspaceRoot', () => {
+    process.env.EVOLVER_REPO_ROOT = tmpDir;
+    const { getWorkspaceRoot, getMemoryDir, getLogsDir, getSkillsDir } = freshRequire('../src/gep/paths');
+    const ws = getWorkspaceRoot();
+    assert.ok(getMemoryDir().startsWith(ws), 'memoryDir should be under workspaceRoot');
+    assert.ok(getLogsDir().startsWith(ws), 'logsDir should be under workspaceRoot');
+    assert.ok(getSkillsDir().startsWith(ws), 'skillsDir should be under workspaceRoot');
   });
 });

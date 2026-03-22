@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Vibe Testing Framework for Capability Evolver
+// Vibe Testing Framework for Evolver
 // Zero-dependency, end-to-end verification in OpenClaw-compatible container.
 // Exit code 0 = all pass, 1 = at least one failure.
 

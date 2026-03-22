@@ -549,15 +549,9 @@ Preferred path: evolver core auto-writes it during solidify.
 The wrapper will handle reporting AFTER git push.
 If core write is unavailable for any reason, create fallback status JSON manually.
 
-Write a JSON file with your status:
+Write a JSON file with your status (cross-platform):
 \`\`\`bash
-cat > ${process.env.WORKSPACE_DIR || '.'}/logs/status_${cycleId}.json << 'STATUSEOF'
-{
-  "result": "success|failed",
-  "en": "Status: [INTENT] <describe what you did in 1-2 sentences, in English>",
-  "zh": "状态: [意图] <用中文描述你做了什么，1-2句>"
-}
-STATUSEOF
+node -e "require('fs').mkdirSync('${(process.env.WORKSPACE_DIR || '.').replace(/\\/g, '/')}/logs',{recursive:true});require('fs').writeFileSync('${(process.env.WORKSPACE_DIR || '.').replace(/\\/g, '/')}/logs/status_${cycleId}.json',JSON.stringify({result:'success',en:'Status: [INTENT] ...',zh:'...'},null,2))"
 \`\`\`
 
 Rules:

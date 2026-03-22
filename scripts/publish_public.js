@@ -590,7 +590,7 @@ function main() {
     publishToClawhub({
       skillDir,
       slug: 'capability-evolver',
-      name: 'Capability Evolver',
+      name: 'Evolver',
       version: releaseVersion,
       changelog,
       tags: 'latest',

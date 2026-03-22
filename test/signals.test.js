@@ -215,3 +215,108 @@ describe('extractSignals -- edge cases (snippet length, empty, punctuation)', ()
     assert.ok(getSignalExtra(r, 'user_improvement_suggestion'));
   });
 });
+
+describe('extractSignals -- windows_shell_incompatible', () => {
+  const originalPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+
+  function setPlatform(value) {
+    Object.defineProperty(process, 'platform', { value, configurable: true });
+  }
+
+  function restorePlatform() {
+    Object.defineProperty(process, 'platform', originalPlatform);
+  }
+
+  it('detects pgrep on win32', () => {
+    setPlatform('win32');
+    try {
+      const r = extractSignals({
+        ...emptyInput,
+        recentSessionTranscript: 'Running pgrep -f evolver to check processes',
+      });
+      assert.ok(hasSignal(r, 'windows_shell_incompatible'), 'expected windows_shell_incompatible for pgrep on win32');
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it('detects ps aux on win32', () => {
+    setPlatform('win32');
+    try {
+      const r = extractSignals({
+        ...emptyInput,
+        recentSessionTranscript: 'Output of ps aux shows running processes',
+      });
+      assert.ok(hasSignal(r, 'windows_shell_incompatible'), 'expected windows_shell_incompatible for ps aux on win32');
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it('detects cat > redirect on win32', () => {
+    setPlatform('win32');
+    try {
+      const r = extractSignals({
+        ...emptyInput,
+        recentSessionTranscript: 'Use cat > output.json to write the file',
+      });
+      assert.ok(hasSignal(r, 'windows_shell_incompatible'), 'expected windows_shell_incompatible for cat > on win32');
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it('detects heredoc on win32', () => {
+    setPlatform('win32');
+    try {
+      const r = extractSignals({
+        ...emptyInput,
+        recentSessionTranscript: 'Use a heredoc to write multiline content',
+      });
+      assert.ok(hasSignal(r, 'windows_shell_incompatible'), 'expected windows_shell_incompatible for heredoc on win32');
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it('does NOT detect on linux even with matching content', () => {
+    setPlatform('linux');
+    try {
+      const r = extractSignals({
+        ...emptyInput,
+        recentSessionTranscript: 'Running pgrep -f evolver and ps aux and cat > file',
+      });
+      assert.ok(!hasSignal(r, 'windows_shell_incompatible'), 'should not flag on linux');
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it('does NOT detect on darwin even with matching content', () => {
+    setPlatform('darwin');
+    try {
+      const r = extractSignals({
+        ...emptyInput,
+        recentSessionTranscript: 'Running pgrep -f evolver',
+      });
+      assert.ok(!hasSignal(r, 'windows_shell_incompatible'), 'should not flag on darwin');
+    } finally {
+      restorePlatform();
+    }
+  });
+
+  it('is treated as cosmetic and dropped when actionable signals exist', () => {
+    setPlatform('win32');
+    try {
+      const r = extractSignals({
+        ...emptyInput,
+        recentSessionTranscript: 'Running pgrep -f evolver',
+        todayLog: 'ERROR: connection refused to database',
+      });
+      assert.ok(!hasSignal(r, 'windows_shell_incompatible'),
+        'cosmetic signal should be dropped when actionable signals exist, got: ' + JSON.stringify(r));
+    } finally {
+      restorePlatform();
+    }
+  });
+});
