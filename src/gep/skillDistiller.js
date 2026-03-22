@@ -12,6 +12,10 @@ const DISTILLER_MIN_SUCCESS_RATE = parseFloat(process.env.DISTILLER_MIN_SUCCESS_
 const DISTILLED_MAX_FILES = 12;
 const DISTILLED_ID_PREFIX = 'gene_distilled_';
 
+const FAILURE_DISTILLER_MIN_CAPSULES = parseInt(process.env.FAILURE_DISTILLER_MIN_CAPSULES || '5', 10) || 5;
+const FAILURE_DISTILLER_INTERVAL_HOURS = parseInt(process.env.FAILURE_DISTILLER_INTERVAL_HOURS || '12', 10) || 12;
+const REPAIR_DISTILLED_ID_PREFIX = 'gene_repair_distilled_';
+
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 }
@@ -839,6 +843,354 @@ function autoDistill() {
   return { ok: true, gene: gene, auto: true };
 }
 
+// ---------------------------------------------------------------------------
+// Failure-based distillation (inspired by MetaClaw's failure trajectory approach)
+// ---------------------------------------------------------------------------
+
+function collectFailureDistillationData() {
+  const assetsDir = paths.getGepAssetsDir();
+  const failedPath = path.join(assetsDir, 'failed_capsules.json');
+  const failedData = readJsonIfExists(failedPath, { failed_capsules: [] });
+  const failedCapsules = Array.isArray(failedData.failed_capsules) ? failedData.failed_capsules : [];
+
+  if (failedCapsules.length === 0) return { failedCapsules: [], grouped: {}, dataHash: '' };
+
+  const grouped = {};
+  failedCapsules.forEach(function (c) {
+    if (!c) return;
+    const reasonClass = (c.failure_reason || '').split(':')[0].split(' ')[0].toLowerCase() || 'unknown';
+    const geneId = c.gene || 'unknown';
+    const key = geneId + '::' + reasonClass;
+    if (!grouped[key]) {
+      grouped[key] = {
+        key: key,
+        gene_id: geneId,
+        reason_class: reasonClass,
+        capsules: [],
+        count: 0,
+        triggers: [],
+        failure_reasons: [],
+        learning_signals_all: [],
+        constraint_violations_all: [],
+      };
+    }
+    const g = grouped[key];
+    g.capsules.push(c);
+    g.count += 1;
+    if (Array.isArray(c.trigger)) g.triggers.push(c.trigger);
+    if (c.failure_reason) g.failure_reasons.push(String(c.failure_reason).slice(0, 300));
+    if (Array.isArray(c.learning_signals)) {
+      g.learning_signals_all = g.learning_signals_all.concat(c.learning_signals);
+    }
+    if (Array.isArray(c.constraint_violations)) {
+      g.constraint_violations_all = g.constraint_violations_all.concat(c.constraint_violations);
+    }
+  });
+
+  return {
+    failedCapsules: failedCapsules,
+    grouped: grouped,
+    dataHash: computeDataHash(failedCapsules),
+  };
+}
+
+function analyzeFailurePatterns(data) {
+  const grouped = data.grouped;
+  const report = {
+    high_frequency_failures: [],
+    recurring_violations: [],
+    total_failures: data.failedCapsules.length,
+  };
+
+  Object.keys(grouped).forEach(function (key) {
+    var g = grouped[key];
+    if (g.count >= 2) {
+      var flat = [];
+      g.triggers.forEach(function (t) { if (Array.isArray(t)) flat = flat.concat(t); });
+      var freq = {};
+      flat.forEach(function (t) { var k = String(t).toLowerCase(); freq[k] = (freq[k] || 0) + 1; });
+      var topTriggers = Object.keys(freq).sort(function (a, b) { return freq[b] - freq[a]; }).slice(0, 5);
+
+      var violationFreq = {};
+      g.constraint_violations_all.forEach(function (v) {
+        var k = String(v).split(':')[0].toLowerCase();
+        violationFreq[k] = (violationFreq[k] || 0) + 1;
+      });
+      var topViolations = Object.keys(violationFreq).sort(function (a, b) { return violationFreq[b] - violationFreq[a]; }).slice(0, 3);
+
+      report.high_frequency_failures.push({
+        key: key,
+        gene_id: g.gene_id,
+        reason_class: g.reason_class,
+        count: g.count,
+        top_triggers: topTriggers,
+        top_violations: topViolations,
+        sample_reasons: g.failure_reasons.slice(0, 3),
+      });
+    }
+  });
+
+  var allViolations = {};
+  Object.keys(grouped).forEach(function (key) {
+    grouped[key].constraint_violations_all.forEach(function (v) {
+      var k = String(v).split(':')[0].toLowerCase();
+      allViolations[k] = (allViolations[k] || 0) + 1;
+    });
+  });
+  report.recurring_violations = Object.keys(allViolations)
+    .filter(function (k) { return allViolations[k] >= 2; })
+    .sort(function (a, b) { return allViolations[b] - allViolations[a]; })
+    .slice(0, 8)
+    .map(function (k) { return { violation: k, count: allViolations[k] }; });
+
+  return report;
+}
+
+function buildFailureDistillationPrompt(analysis, existingGenes, sampleCapsules) {
+  var genesRef = existingGenes.map(function (g) {
+    return { id: g.id, category: g.category || null, signals_match: g.signals_match || [] };
+  });
+  var samples = sampleCapsules.slice(0, 8).map(function (c) {
+    return {
+      gene: c.gene || null,
+      trigger: c.trigger || [],
+      failure_reason: (c.failure_reason || '').slice(0, 300),
+      learning_signals: (c.learning_signals || []).slice(0, 8),
+      constraint_violations: (c.constraint_violations || []).slice(0, 5),
+      blast_radius: c.blast_radius || null,
+    };
+  });
+
+  return [
+    'You are a Repair Gene synthesis engine for the GEP (Genome Evolution Protocol).',
+    'Your job is to distill FAILED evolution capsules into a defensive, reusable Repair Gene',
+    'that prevents other AI agents from repeating the same failure patterns.',
+    '',
+    '## CONTEXT',
+    '',
+    'These capsules represent failed evolution attempts. Your goal is to analyze the failure',
+    'patterns and synthesize a Gene that, when matched, guides agents to AVOID the mistake',
+    'and apply the correct approach instead.',
+    '',
+    '## OUTPUT FORMAT',
+    '',
+    'Output ONLY a single valid JSON object (no markdown fences, no explanation).',
+    '',
+    '## GENE ID RULES (CRITICAL)',
+    '',
+    '- The id MUST start with "' + REPAIR_DISTILLED_ID_PREFIX + '" followed by a descriptive kebab-case name.',
+    '- The suffix MUST describe the failure pattern being guarded against in 3-6 words.',
+    '- Good: "gene_repair_distilled_prevent-blast-radius-overflow", "gene_repair_distilled_validate-before-destructive-write"',
+    '',
+    '## SUMMARY RULES',
+    '',
+    '- The "summary" MUST describe WHAT failure pattern this Gene prevents and HOW.',
+    '- Write defensively: "Prevents X by ensuring Y before Z".',
+    '- Good: "Prevents blast radius overflow by pre-checking file count and running narrower patches"',
+    '',
+    '## STRATEGY RULES',
+    '',
+    '- Strategy steps MUST be defensive and preventive, not just reactive.',
+    '- Include explicit guard checks, pre-validation, and rollback instructions.',
+    '- Start with verification/guard steps, then the safe action, then validation.',
+    '- Include 5-10 steps.',
+    '',
+    '## SIGNALS_MATCH RULES',
+    '',
+    '- Include signals that match the CONTEXT where this failure occurs.',
+    '- Include both the triggering signals and the failure-type signals.',
+    '- Good: ["blast_radius_exceeded", "constraint_violation", "error", "repair"]',
+    '',
+    '## CONSTRAINTS',
+    '',
+    '- constraints.max_files MUST be <= ' + DISTILLED_MAX_FILES,
+    '- constraints.forbidden_paths MUST include at least [".git", "node_modules"]',
+    '',
+    '## VALIDATION',
+    '',
+    '- Validation commands MUST start with "node ", "npm ", or "npx " (security constraint).',
+    '',
+    '---',
+    '',
+    'FAILED CAPSULES (grouped by failure pattern):',
+    JSON.stringify(samples, null, 2),
+    '',
+    'FAILURE ANALYSIS:',
+    JSON.stringify(analysis, null, 2),
+    '',
+    'EXISTING GENES (avoid duplication):',
+    JSON.stringify(genesRef, null, 2),
+    '',
+    'Output a single Gene JSON object:',
+    '{ "type": "Gene", "id": "' + REPAIR_DISTILLED_ID_PREFIX + '<descriptive-kebab-name>", "summary": "<defensive description>", "category": "repair", "signals_match": ["signal_1", ...], "preconditions": ["condition 1", ...], "strategy": ["Step 1: guard ...", "Step 2: verify ...", ...], "constraints": { "max_files": N, "forbidden_paths": [".git", "node_modules", ...] }, "validation": ["npx tsc --noEmit", ...], "schema_version": "1.6.0" }',
+  ].join('\n');
+}
+
+function synthesizeRepairGeneFromFailures(data, analysis, existingGenes) {
+  if (!analysis || !analysis.high_frequency_failures || analysis.high_frequency_failures.length === 0) return null;
+
+  var topPattern = analysis.high_frequency_failures[0];
+  var existing = Array.isArray(existingGenes) ? existingGenes : [];
+
+  var triggerFreq = {};
+  var group = data.grouped[topPattern.key];
+  if (!group) return null;
+
+  (group.triggers || []).forEach(function (arr) {
+    (Array.isArray(arr) ? arr : []).forEach(function (s) {
+      var k = String(s).toLowerCase();
+      triggerFreq[k] = (triggerFreq[k] || 0) + 1;
+    });
+  });
+
+  var signalsMatch = Object.keys(triggerFreq)
+    .sort(function (a, b) { return triggerFreq[b] - triggerFreq[a]; })
+    .slice(0, 4);
+
+  var failureSignals = [];
+  (group.learning_signals_all || []).forEach(function (s) {
+    var k = String(s).toLowerCase();
+    if (failureSignals.indexOf(k) === -1 && failureSignals.length < 3) failureSignals.push(k);
+  });
+  signalsMatch = Array.from(new Set(signalsMatch.concat(failureSignals)));
+
+  if (signalsMatch.length === 0) signalsMatch = ['error', 'constraint_violation'];
+
+  var reasonSample = (group.failure_reasons || []).slice(0, 2).join('; ').slice(0, 200);
+  var violationSample = (topPattern.top_violations || []).slice(0, 3).join(', ');
+
+  var summary = 'Prevents repeated failure: ' + topPattern.reason_class;
+  if (violationSample) summary += ' (guards against: ' + violationSample + ')';
+  summary = summary.slice(0, 200);
+
+  var strategy = [
+    'GUARD: Check preconditions before making changes -- verify blast radius estimate is within limits.',
+    'GUARD: Validate that target files are not in forbidden_paths before editing.',
+    'APPLY: Make the smallest possible change to address the signal, favoring single-file patches.',
+    'VERIFY: Run validation commands immediately after the change.',
+    'ROLLBACK: If validation fails, revert all changes before proceeding.',
+  ];
+
+  if (violationSample) {
+    strategy.splice(2, 0, 'GUARD: Previous failures involved "' + violationSample + '" -- add explicit checks to prevent recurrence.');
+  }
+
+  var idSeed = {
+    type: 'Gene',
+    signals_match: signalsMatch,
+    summary: summary,
+    strategy: strategy,
+  };
+
+  var gene = {
+    type: 'Gene',
+    id: REPAIR_DISTILLED_ID_PREFIX + deriveDescriptiveId(idSeed).replace(DISTILLED_ID_PREFIX, ''),
+    summary: summary,
+    category: 'repair',
+    signals_match: signalsMatch,
+    preconditions: ['Repeated failure pattern detected in recent capsules (' + topPattern.count + ' occurrences)'],
+    strategy: strategy,
+    constraints: {
+      max_files: Math.min(DISTILLED_MAX_FILES, 8),
+      forbidden_paths: ['.git', 'node_modules'],
+    },
+    validation: ['node --test'],
+    schema_version: '1.6.0',
+  };
+
+  return gene;
+}
+
+function shouldDistillFromFailures() {
+  if (String(process.env.SKILL_DISTILLER || 'true').toLowerCase() === 'false') return false;
+  if (String(process.env.FAILURE_DISTILLER || 'true').toLowerCase() === 'false') return false;
+
+  var state = readDistillerState();
+  if (state.last_failure_distillation_at) {
+    var elapsed = Date.now() - new Date(state.last_failure_distillation_at).getTime();
+    if (elapsed < FAILURE_DISTILLER_INTERVAL_HOURS * 3600000) return false;
+  }
+
+  var assetsDir = paths.getGepAssetsDir();
+  var failedPath = path.join(assetsDir, 'failed_capsules.json');
+  var failedData = readJsonIfExists(failedPath, { failed_capsules: [] });
+  var failedCapsules = Array.isArray(failedData.failed_capsules) ? failedData.failed_capsules : [];
+
+  return failedCapsules.length >= FAILURE_DISTILLER_MIN_CAPSULES;
+}
+
+function autoDistillFromFailures() {
+  var data = collectFailureDistillationData();
+  if (data.failedCapsules.length < FAILURE_DISTILLER_MIN_CAPSULES) {
+    return { ok: false, reason: 'insufficient_failures' };
+  }
+
+  var state = readDistillerState();
+  if (state.last_failure_data_hash === data.dataHash) {
+    return { ok: false, reason: 'idempotent_skip' };
+  }
+
+  var analysis = analyzeFailurePatterns(data);
+  if (analysis.high_frequency_failures.length === 0) {
+    return { ok: false, reason: 'no_recurring_pattern' };
+  }
+
+  var assetsDir = paths.getGepAssetsDir();
+  var existingGenesJson = readJsonIfExists(path.join(assetsDir, 'genes.json'), { genes: [] });
+  var existingGenes = existingGenesJson.genes || [];
+
+  var rawGene = synthesizeRepairGeneFromFailures(data, analysis, existingGenes);
+  if (!rawGene) return { ok: false, reason: 'no_candidate_gene' };
+
+  var validation = validateSynthesizedGene(rawGene, existingGenes);
+  if (!validation.valid) {
+    appendJsonl(distillerLogPath(), {
+      timestamp: new Date().toISOString(),
+      data_hash: data.dataHash,
+      status: 'failure_auto_validation_failed',
+      synthesized_gene_id: validation.gene ? validation.gene.id : null,
+      validation_errors: validation.errors,
+      source: 'failure_distillation',
+    });
+    return { ok: false, reason: 'validation_failed', errors: validation.errors };
+  }
+
+  var gene = validation.gene;
+  gene._distilled_meta = {
+    distilled_at: new Date().toISOString(),
+    source_failure_count: data.failedCapsules.length,
+    data_hash: data.dataHash,
+    auto_distilled: true,
+    source: 'failure_distillation',
+  };
+
+  var assetStore = require('./assetStore');
+  assetStore.upsertGene(gene);
+
+  state.last_failure_distillation_at = new Date().toISOString();
+  state.last_failure_data_hash = data.dataHash;
+  state.last_failure_gene_id = gene.id;
+  state.failure_distillation_count = (state.failure_distillation_count || 0) + 1;
+  writeDistillerState(state);
+
+  appendJsonl(distillerLogPath(), {
+    timestamp: new Date().toISOString(),
+    data_hash: data.dataHash,
+    status: 'failure_auto_success',
+    synthesized_gene_id: gene.id,
+    source_failure_count: data.failedCapsules.length,
+    analysis_summary: {
+      high_frequency_count: analysis.high_frequency_failures.length,
+      recurring_violations_count: analysis.recurring_violations.length,
+    },
+    source: 'failure_distillation',
+    gene: gene,
+  });
+
+  console.log('[Distiller] Repair gene distilled from ' + data.failedCapsules.length + ' failures: ' + gene.id);
+  return { ok: true, gene: gene, auto: true, source: 'failure_distillation' };
+}
+
 module.exports = {
   collectDistillationData: collectDistillationData,
   analyzePatterns: analyzePatterns,
@@ -859,4 +1211,12 @@ module.exports = {
   writeDistillerState: writeDistillerState,
   DISTILLED_ID_PREFIX: DISTILLED_ID_PREFIX,
   DISTILLED_MAX_FILES: DISTILLED_MAX_FILES,
+  collectFailureDistillationData: collectFailureDistillationData,
+  analyzeFailurePatterns: analyzeFailurePatterns,
+  buildFailureDistillationPrompt: buildFailureDistillationPrompt,
+  synthesizeRepairGeneFromFailures: synthesizeRepairGeneFromFailures,
+  shouldDistillFromFailures: shouldDistillFromFailures,
+  autoDistillFromFailures: autoDistillFromFailures,
+  REPAIR_DISTILLED_ID_PREFIX: REPAIR_DISTILLED_ID_PREFIX,
+  FAILURE_DISTILLER_MIN_CAPSULES: FAILURE_DISTILLER_MIN_CAPSULES,
 };

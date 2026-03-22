@@ -202,6 +202,31 @@ async function main() {
             currentSleepMs = minSleepMs;
           }
 
+          // OMLS-inspired idle scheduling: adjust sleep and trigger aggressive
+          // operations (distillation, reflection) during detected idle windows.
+          let omlsMultiplier = 1;
+          try {
+            const { getScheduleRecommendation } = require('./src/gep/idleScheduler');
+            const schedule = getScheduleRecommendation();
+            if (schedule.enabled && schedule.sleep_multiplier > 0) {
+              omlsMultiplier = schedule.sleep_multiplier;
+              if (schedule.should_distill) {
+                try {
+                  const { shouldDistillFromFailures: shouldDF, autoDistillFromFailures: autoDF } = require('./src/gep/skillDistiller');
+                  if (shouldDF()) {
+                    const dfResult = autoDF();
+                    if (dfResult && dfResult.ok) {
+                      console.log('[OMLS] Idle-window failure distillation: ' + dfResult.gene.id);
+                    }
+                  }
+                } catch (e) {}
+              }
+              if (isVerbose && schedule.idle_seconds >= 0) {
+                console.log(`[OMLS] idle=${schedule.idle_seconds}s intensity=${schedule.intensity} multiplier=${omlsMultiplier}`);
+              }
+            }
+          } catch (e) {}
+
           // Suicide check (memory leak protection)
           if (suicideEnabled) {
             const memMb = process.memoryUsage().rss / 1024 / 1024;
@@ -239,7 +264,7 @@ async function main() {
 
           // Jitter to avoid lockstep restarts.
           const jitter = Math.floor(Math.random() * 250);
-          const totalSleepMs = (currentSleepMs + jitter) * saturationMultiplier;
+          const totalSleepMs = Math.max(minSleepMs, (currentSleepMs + jitter) * saturationMultiplier * omlsMultiplier);
           if (isVerbose) {
             const memMb = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
             console.log(`[Verbose] cycle=${cycleCount} ok=${ok} dt=${dt}ms sleep=${totalSleepMs}ms (base=${currentSleepMs} jitter=${jitter} sat=${saturationMultiplier}x) rss=${memMb}MB signals=[${(function() { try { var st = readJsonSafe(solidifyStatePath); return st && st.last_run && Array.isArray(st.last_run.signals) ? st.last_run.signals.join(',') : ''; } catch(e) { return ''; } })()}]`);
@@ -290,7 +315,7 @@ async function main() {
 
       if (res && res.ok && !dryRun) {
         try {
-          const { shouldDistill, prepareDistillation, autoDistill } = require('./src/gep/skillDistiller');
+          const { shouldDistill, prepareDistillation, autoDistill, shouldDistillFromFailures, autoDistillFromFailures } = require('./src/gep/skillDistiller');
           const { readStateForSolidify } = require('./src/gep/solidify');
           const solidifyState = readStateForSolidify();
           const count = solidifyState.solidify_count || 0;
@@ -313,6 +338,13 @@ async function main() {
                 console.log('Prompt file: ' + dr.promptPath);
                 console.log('[/DISTILL_REQUEST]');
               }
+            }
+          }
+
+          if (shouldDistillFromFailures()) {
+            const failureResult = autoDistillFromFailures();
+            if (failureResult && failureResult.ok && failureResult.gene) {
+              console.log('[Distiller] Repair gene distilled from failures: ' + failureResult.gene.id);
             }
           }
         } catch (e) {

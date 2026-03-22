@@ -1,6 +1,73 @@
 const { scoreTagOverlap } = require('./learningSignals');
 const { captureEnvFingerprint } = require('./envFingerprint');
 
+// ---------------------------------------------------------------------------
+// Lightweight semantic similarity (bag-of-words cosine) for Gene selection.
+// Acts as a complement to exact signals_match pattern matching.
+// When EMBEDDING_PROVIDER is configured, can be replaced with real embeddings.
+// ---------------------------------------------------------------------------
+const SEMANTIC_WEIGHT = parseFloat(process.env.SEMANTIC_MATCH_WEIGHT || '0.4') || 0.4;
+const STOP_WORDS = new Set([
+  'the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'when',
+  'are', 'was', 'has', 'had', 'not', 'but', 'its', 'can', 'will', 'all',
+  'any', 'use', 'may', 'also', 'should', 'would', 'could',
+]);
+
+function tokenize(text) {
+  return String(text || '').toLowerCase()
+    .replace(/[^a-z0-9_\-]+/g, ' ')
+    .split(/\s+/)
+    .filter(function (w) { return w.length >= 2 && !STOP_WORDS.has(w); });
+}
+
+function buildTermFrequency(tokens) {
+  var tf = {};
+  for (var i = 0; i < tokens.length; i++) {
+    tf[tokens[i]] = (tf[tokens[i]] || 0) + 1;
+  }
+  return tf;
+}
+
+function cosineSimilarity(tfA, tfB) {
+  var keys = new Set(Object.keys(tfA).concat(Object.keys(tfB)));
+  var dotProduct = 0;
+  var normA = 0;
+  var normB = 0;
+  keys.forEach(function (k) {
+    var a = tfA[k] || 0;
+    var b = tfB[k] || 0;
+    dotProduct += a * b;
+    normA += a * a;
+    normB += b * b;
+  });
+  if (normA === 0 || normB === 0) return 0;
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+
+function scoreGeneSemantic(gene, signals) {
+  if (!gene || !signals || signals.length === 0) return 0;
+
+  var signalTokens = [];
+  signals.forEach(function (s) {
+    signalTokens = signalTokens.concat(tokenize(s));
+  });
+  if (signalTokens.length === 0) return 0;
+
+  var geneTokens = [];
+  if (Array.isArray(gene.signals_match)) {
+    gene.signals_match.forEach(function (s) {
+      geneTokens = geneTokens.concat(tokenize(s));
+    });
+  }
+  if (gene.summary) geneTokens = geneTokens.concat(tokenize(gene.summary));
+  if (gene.id) geneTokens = geneTokens.concat(tokenize(gene.id));
+  if (geneTokens.length === 0) return 0;
+
+  var tfSignals = buildTermFrequency(signalTokens);
+  var tfGene = buildTermFrequency(geneTokens);
+  return cosineSimilarity(tfSignals, tfGene);
+}
+
 function matchPatternToSignals(pattern, signals) {
   if (!pattern || !signals || signals.length === 0) return false;
   const p = String(pattern);
@@ -39,7 +106,8 @@ function scoreGene(gene, signals) {
   for (const pat of patterns) {
     if (matchPatternToSignals(pat, signals)) score += 1;
   }
-  return score + (tagScore * 0.6);
+  const semanticScore = scoreGeneSemantic(gene, signals) * SEMANTIC_WEIGHT;
+  return score + (tagScore * 0.6) + semanticScore;
 }
 
 function getEpigeneticBoostLocal(gene, envFingerprint) {
@@ -340,5 +408,8 @@ module.exports = {
   selectCapsule,
   buildSelectorDecision,
   matchPatternToSignals,
+  scoreGeneSemantic,
+  cosineSimilarity,
+  tokenize,
 };
 

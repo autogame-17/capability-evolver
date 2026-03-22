@@ -85,6 +85,18 @@ function stableHash(input) {
 
 // checkConstraints moved to ./policyCheck.js
 
+function computeGeneLibraryVersion() {
+  try {
+    const genesPath = path.join(require('./paths').getGepAssetsDir(), 'genes.json');
+    if (!fs.existsSync(genesPath)) return null;
+    const raw = fs.readFileSync(genesPath, 'utf8');
+    const hash = require('crypto').createHash('sha256').update(raw, 'utf8').digest('hex').slice(0, 16);
+    return 'glib_' + hash;
+  } catch (e) {
+    return null;
+  }
+}
+
 function readStateForSolidify() {
   const memoryDir = getMemoryDir();
   const statePath = path.join(getEvolutionDir(), 'evolution_solidify_state.json');
@@ -412,6 +424,124 @@ function readRecentSessionInputs() {
 
 // isGitRepo moved to ./gitOps.js
 
+// ---------------------------------------------------------------------------
+// Process Reward Model (PRM-inspired multi-step scoring)
+// Evaluates each phase of the evolution cycle independently for richer feedback.
+// ---------------------------------------------------------------------------
+function computeProcessScores(opts) {
+  const {
+    constraintCheck, validation, protocolViolations, canary,
+    blast, geneUsed, signals, mutation, blastRadiusEstimate, llmReviewResult,
+  } = opts || {};
+
+  // Phase 1: Signal quality (did we have meaningful signals to work with?)
+  let signalScore = 0.5;
+  if (Array.isArray(signals) && signals.length > 0) {
+    signalScore = Math.min(1, 0.4 + signals.length * 0.1);
+  }
+
+  // Phase 2: Gene selection quality (was a matching gene found?)
+  let selectionScore = 0.3;
+  if (geneUsed && geneUsed.type === 'Gene') {
+    selectionScore = 0.7;
+    if (geneUsed.id && !geneUsed.id.startsWith('gene_auto_')) selectionScore = 0.9;
+  }
+
+  // Phase 3: Mutation quality (was the mutation well-formed?)
+  let mutationScore = 0.5;
+  if (mutation && mutation.rationale && mutation.category) {
+    mutationScore = 0.8;
+    if (mutation.risk_level === 'low') mutationScore = 0.9;
+    if (mutation.risk_level === 'high') mutationScore = 0.6;
+  }
+  if (!mutation) mutationScore = 0.3;
+
+  // Phase 4: Blast radius control (was the change scope appropriate?)
+  let blastScore = 0.5;
+  if (blast) {
+    const maxFiles = geneUsed && geneUsed.constraints && geneUsed.constraints.max_files
+      ? geneUsed.constraints.max_files : 12;
+    if (blast.files === 0) {
+      blastScore = 0.4;
+    } else if (blast.files <= maxFiles * 0.5) {
+      blastScore = 1.0;
+    } else if (blast.files <= maxFiles) {
+      blastScore = 0.7;
+    } else {
+      blastScore = 0.2;
+    }
+  }
+  if (blastRadiusEstimate && blast) {
+    const estFiles = blastRadiusEstimate.files_changed || 0;
+    if (estFiles > 0 && blast.files > 0) {
+      const ratio = blast.files / estFiles;
+      if (ratio > 3) blastScore *= 0.5;
+      else if (ratio > 2) blastScore *= 0.7;
+    }
+  }
+
+  // Phase 5: Constraint compliance
+  let constraintScore = 1.0;
+  if (constraintCheck && !constraintCheck.ok) {
+    const violationCount = Array.isArray(constraintCheck.violations) ? constraintCheck.violations.length : 0;
+    constraintScore = Math.max(0, 1 - violationCount * 0.25);
+  }
+
+  // Phase 6: Validation pass rate
+  let validationScore = 1.0;
+  if (validation && Array.isArray(validation.results) && validation.results.length > 0) {
+    const passed = validation.results.filter(function (r) { return r && r.ok; }).length;
+    validationScore = passed / validation.results.length;
+  } else if (validation && !validation.ok) {
+    validationScore = 0;
+  }
+
+  // Phase 7: Protocol compliance
+  let protocolScore = 1.0;
+  if (Array.isArray(protocolViolations) && protocolViolations.length > 0) {
+    protocolScore = Math.max(0, 1 - protocolViolations.length * 0.3);
+  }
+
+  // Phase 8: Canary health
+  let canaryScore = 1.0;
+  if (canary && !canary.ok && !canary.skipped) canaryScore = 0;
+
+  // Weighted composite score
+  const weights = {
+    signal: 0.05,
+    selection: 0.10,
+    mutation: 0.05,
+    blast: 0.15,
+    constraint: 0.25,
+    validation: 0.25,
+    protocol: 0.10,
+    canary: 0.05,
+  };
+
+  const composite =
+    signalScore * weights.signal +
+    selectionScore * weights.selection +
+    mutationScore * weights.mutation +
+    blastScore * weights.blast +
+    constraintScore * weights.constraint +
+    validationScore * weights.validation +
+    protocolScore * weights.protocol +
+    canaryScore * weights.canary;
+
+  return {
+    signal_quality: Math.round(signalScore * 100) / 100,
+    gene_selection: Math.round(selectionScore * 100) / 100,
+    mutation_quality: Math.round(mutationScore * 100) / 100,
+    blast_control: Math.round(blastScore * 100) / 100,
+    constraint_compliance: Math.round(constraintScore * 100) / 100,
+    validation_pass_rate: Math.round(validationScore * 100) / 100,
+    protocol_compliance: Math.round(protocolScore * 100) / 100,
+    canary_health: Math.round(canaryScore * 100) / 100,
+    composite: Math.round(composite * 100) / 100,
+    weights: weights,
+  };
+}
+
 function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } = {}) {
   const repoRoot = getRepoRoot();
 
@@ -556,7 +686,23 @@ function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } 
   const success = constraintCheck.ok && validation.ok && protocolViolations.length === 0;
   const ts = nowIso();
   const outcomeStatus = success ? 'success' : 'failed';
-  const score = clamp01(success ? 0.85 : 0.2);
+
+  // Multi-step process scoring (PRM-inspired): evaluate each phase independently
+  // rather than a single binary outcome. This enables richer feedback for gene
+  // selection, distillation, and future RL-based optimization.
+  const processScores = computeProcessScores({
+    constraintCheck,
+    validation,
+    protocolViolations,
+    canary,
+    blast,
+    geneUsed,
+    signals,
+    mutation,
+    blastRadiusEstimate,
+    llmReviewResult,
+  });
+  const score = clamp01(processScores.composite);
   const failureReason = !success ? buildFailureReason(constraintCheck, validation, protocolViolations, canary) : '';
   const failureMode = !success
     ? classifyFailureMode({
@@ -591,6 +737,8 @@ function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } 
   // LessonL: carry applied lesson IDs for Hub effectiveness adjustment
   const appliedLessons = lastRun && Array.isArray(lastRun.applied_lessons) ? lastRun.applied_lessons : [];
 
+  const geneLibVersion = computeGeneLibraryVersion();
+
   const event = {
     type: 'EvolutionEvent',
     schema_version: SCHEMA_VERSION,
@@ -607,6 +755,7 @@ function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } 
     source_type: sourceType,
     reused_asset_id: reusedAssetId,
     ...(appliedLessons.length > 0 ? { applied_lessons: appliedLessons } : {}),
+    gene_library_version: geneLibVersion,
     env_fingerprint: envFp,
     validation_report_id: validationReport.id,
     meta: {
@@ -647,6 +796,7 @@ function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } 
         class: failureMode.reasonClass,
         mode: failureMode.mode,
       },
+      process_scores: processScores,
     },
   };
   // Build desensitized execution trace for cross-agent experience sharing
@@ -699,6 +849,7 @@ function solidify({ intent, summary, dryRun = false, rollbackOnFailure = true } 
       outcome: { status: 'success', score },
       success_streak: 1,
       success_reason: successReason,
+      gene_library_version: geneLibVersion,
       env_fingerprint: envFp,
       source_type: sourceType,
       reused_asset_id: reusedAssetId,
@@ -1146,6 +1297,8 @@ module.exports = {
   getEpigeneticBoost,
   buildEpigeneticMark,
   buildSuccessReason,
+  computeGeneLibraryVersion,
+  computeProcessScores,
   BLAST_RADIUS_HARD_CAP_FILES,
   BLAST_RADIUS_HARD_CAP_LINES,
 };
