@@ -11,6 +11,7 @@ var OPPORTUNITY_SIGNALS = [
   'evolution_stagnation_detected',
   'repair_loop_detected',
   'force_innovation_after_repair_loop',
+  'tool_bypass',
 ];
 
 function hasOpportunitySignal(signals) {
@@ -311,6 +312,27 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
       signals.push('repeated_tool_usage:exec');
     }
   });
+
+  // --- Tool bypass detection ---
+  // When the agent uses shell/exec to run ad-hoc scripts instead of registered tools,
+  // it indicates a tool integrity issue (bypassing the tool layer).
+  var bypassPatterns = [
+    /node\s+\S+\.m?js/,
+    /npx\s+/,
+    /curl\s+.*api/i,
+    /python\s+\S+\.py/,
+  ];
+  var execContent = corpus.match(/exec:.*$/gm) || [];
+  for (var bpi = 0; bpi < execContent.length; bpi++) {
+    var line = execContent[bpi];
+    for (var bpj = 0; bpj < bypassPatterns.length; bpj++) {
+      if (bypassPatterns[bpj].test(line)) {
+        signals.push('tool_bypass');
+        bpi = execContent.length;
+        break;
+      }
+    }
+  }
 
   // --- Signal prioritization ---
   // Remove cosmetic signals when actionable signals exist

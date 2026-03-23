@@ -75,6 +75,22 @@ function getDefaultGenes() {
           'node scripts/validate-suite.js',
         ],
       },
+      {
+        type: 'Gene', id: 'gene_tool_integrity', category: 'repair',
+        signals_match: ['tool_bypass'],
+        preconditions: ['agent used shell/exec to perform an action that a registered tool can handle'],
+        strategy: [
+          'Always prefer registered tools over ad-hoc scripts or shell workarounds',
+          'If a registered tool fails, report the actual error honestly and attempt to fix the root cause',
+          'Never fabricate explanations -- describe actual actions transparently',
+          'Do not create temporary scripts in extension or project directories',
+        ],
+        constraints: { max_files: 4, forbidden_paths: ['.git', 'node_modules'] },
+        validation: [
+          'node scripts/validate-suite.js',
+        ],
+        anti_patterns: ['tool_bypass'],
+      },
     ],
   };
 }
