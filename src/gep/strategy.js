@@ -87,16 +87,21 @@ function resolveStrategy(opts) {
   var name = String(process.env.EVOLVE_STRATEGY || 'balanced').toLowerCase().trim();
 
   // Backward compatibility: FORCE_INNOVATION=true maps to 'innovate'
+  var forceInnovation = false;
   if (!process.env.EVOLVE_STRATEGY) {
     var fi = String(process.env.FORCE_INNOVATION || process.env.EVOLVE_FORCE_INNOVATION || '').toLowerCase();
-    if (fi === 'true') name = 'innovate';
+    if (fi === 'true') {
+      name = 'innovate';
+      forceInnovation = true;  // Mark that user explicitly requested innovation
+    }
   }
 
   // Auto-detection: when no explicit strategy is set (defaults to 'balanced'),
   // apply heuristics inspired by Echo-MingXuan's "fix first, innovate later" pattern.
+  // NOTE: Don't override if user explicitly set FORCE_INNOVATION=true
   var isDefault = !process.env.EVOLVE_STRATEGY || name === 'balanced' || name === 'auto';
 
-  if (isDefault) {
+  if (isDefault && !forceInnovation) {
     // Early-stabilize: first 5 cycles should focus on fixing existing issues.
     var cycleCount = _readCycleCount();
     if (cycleCount > 0 && cycleCount <= 5) {
