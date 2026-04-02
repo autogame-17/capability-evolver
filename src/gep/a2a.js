@@ -165,9 +165,18 @@ function readTextIfExists(filePath) {
   } catch { return ''; }
 }
 
+function generateInviteCode() {
+  var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  var code = '';
+  for (var i = 0; i < 8; i++) {
+    code += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return code;
+}
+
 module.exports = {
   isAllowedA2AAsset, lowerConfidence, isBlastRadiusSafe,
   computeCapsuleSuccessStreak, isCapsuleBroadcastEligible,
   exportEligibleCapsules, isGeneBroadcastEligible,
-  exportEligibleGenes, parseA2AInput, readTextIfExists,
+  exportEligibleGenes, parseA2AInput, readTextIfExists, generateInviteCode
 };
