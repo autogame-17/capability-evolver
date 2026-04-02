@@ -8,9 +8,6 @@ function getRepoRoot() {
 
   const ownDir = path.resolve(__dirname, '..', '..');
 
-  // Safety: check evolver's own directory first to prevent operating on a
-  // parent repo that happens to contain .git (which could cause data loss
-  // when git reset --hard runs in the wrong scope).
   if (fs.existsSync(path.join(ownDir, '.git'))) {
     return ownDir;
   }
@@ -46,9 +43,6 @@ function getWorkspaceRoot() {
     return workspaceDir;
   }
 
-  // Standalone / Cursor / non-OpenClaw: use the repo root itself as workspace.
-  // The old 4-level-up fallback assumed OpenClaw's skill directory layout
-  // (/workspace/skills/evolver/) which resolves incorrectly in other environments.
   return repoRoot;
 }
 
@@ -64,15 +58,9 @@ function getMemoryDir() {
   return process.env.MEMORY_DIR || path.join(getWorkspaceRoot(), 'memory');
 }
 
-// --- Session Scope Isolation ---
-// When EVOLVER_SESSION_SCOPE is set (e.g., to a Discord channel ID or project name),
-// evolution state, memory graph, and assets are isolated to a per-scope subdirectory.
-// This prevents cross-channel/cross-project memory contamination.
-// When NOT set, everything works as before (global scope, backward compatible).
 function getSessionScope() {
   const raw = String(process.env.EVOLVER_SESSION_SCOPE || '').trim();
   if (!raw) return null;
-  // Sanitize: only allow alphanumeric, dash, underscore, dot (prevent path traversal).
   const safe = raw.replace(/[^a-zA-Z0-9_\-\.]/g, '_').slice(0, 128);
   if (!safe || /^\.{1,2}$/.test(safe) || /\.\./.test(safe)) return null;
   return safe;
@@ -116,6 +104,23 @@ function getReflectionLogPath() {
   return path.join(getEvolutionDir(), 'reflection_log.jsonl');
 }
 
+function getInviteCodePath() {
+  const repoRoot = getRepoRoot();
+  return path.join(repoRoot, 'invite_code.txt');
+}
+
+function getInviteCode() {
+  const inviteCodePath = getInviteCodePath();
+  try {
+    if (fs.existsSync(inviteCodePath)) {
+      return fs.readFileSync(inviteCodePath, 'utf8').trim();
+    }
+  } catch (error) {
+    console.error('Error reading invite code:', error);
+  }
+  return null;
+}
+
 module.exports = {
   getRepoRoot,
   getWorkspaceRoot,
@@ -129,5 +134,5 @@ module.exports = {
   getNarrativePath,
   getEvolutionPrinciplesPath,
   getReflectionLogPath,
+  getInviteCode,
 };
-
