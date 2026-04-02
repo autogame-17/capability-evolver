@@ -48,7 +48,9 @@ function main() {
           try {
             var dm = a2aProto.buildDecision({ assetId: obj.asset_id, localId: obj.id, decision: 'reject', reason: 'asset_id integrity check failed' });
             a2aProto.getTransport().send(dm);
-          } catch (e) {}
+          } catch (e) {
+            console.error('Error sending decision:', e);
+          }
         }
         continue;
       }
@@ -57,23 +59,40 @@ function main() {
     var staged = a2a.lowerConfidence(obj, { source: source, factor: factor });
     if (!staged) continue;
 
-    assetStore.appendExternalCandidateJsonl(staged);
-    try { memGraph.recordExternalCandidate({ asset: staged, source: source, signals: signals }); } catch (e) {}
+    try {
+      assetStore.appendExternalCandidateJsonl(staged);
+    } catch (e) {
+      console.error('Error appending external candidate:', e);
+      rejected += 1;
+      continue;
+    }
+
+    try {
+      memGraph.recordExternalCandidate({ asset: staged, source: source, signals: signals });
+    } catch (e) {
+      console.error('Error recording external candidate:', e);
+      rejected += 1;
+      continue;
+    }
 
     if (emitDecisions) {
       try {
         var dm2 = a2aProto.buildDecision({ assetId: staged.asset_id, localId: staged.id, decision: 'quarantine', reason: 'staged as external candidate' });
         a2aProto.getTransport().send(dm2);
-      } catch (e) {}
+      } catch (e) {
+        console.error('Error sending decision:', e);
+        rejected += 1;
+        continue;
+      }
     }
 
     accepted += 1;
   }
 
-  process.stdout.write('accepted=' + accepted + ' rejected=' + rejected + '\n');
+  console.log(`accepted=${accepted} rejected=${rejected}`);
 }
 
 try { main(); } catch (e) {
-  process.stderr.write((e && e.message ? e.message : String(e)) + '\n');
+  console.error('Error running main:', e);
   process.exit(1);
 }
