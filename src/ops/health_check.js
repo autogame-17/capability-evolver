@@ -17,10 +17,11 @@ function getDiskUsage(mount) {
             };
         }
         // Fallback
-        const out = execSync(`df -P "${mount || '/'}" | tail -1 | awk '{print $5, $4}'`).toString().trim().split(' ');
+        const safeMount = String(mount || '/').replace(/["';&|><`$()]/g, '');
+        const out = execSync(`df -P "${safeMount}" | tail -1 | awk '{print $5, $4}'`).toString().trim().split(' ');
         return {
-            pct: parseInt(out[0].replace('%', '')),
-            freeMb: Math.round(parseInt(out[1]) / 1024) // df returns 1k blocks usually
+            pct: parseInt(out[0].replace(/%/g, ''), 10),
+            freeMb: Math.round(parseInt(out[1], 10) / 1024) // df returns 1k blocks usually
         };
     } catch (e) {
         return { pct: 0, freeMb: 999999, error: e.message };

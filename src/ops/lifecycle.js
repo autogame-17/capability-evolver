@@ -50,7 +50,13 @@ function isPidRunning(pid) {
 }
 
 function getCmdLine(pid) {
-    try { return execSync('ps -p ' + pid + ' -o args=', { encoding: 'utf8' }).trim(); } catch (e) { return null; }
+    try {
+        const safePid = parseInt(pid, 10);
+        if (isNaN(safePid)) return null;
+        return require('child_process').execSync(`ps -p ${safePid} -o args=`, { encoding: 'utf8' }).trim();
+    } catch (e) {
+        return null;
+    }
 }
 
 // --- Lifecycle ---
@@ -62,7 +68,10 @@ function start(options) {
         console.log('[Lifecycle] Already running (PIDs: ' + pids.join(', ') + ').');
         return { status: 'already_running', pids: pids };
     }
-    if (delayMs > 0) execSync('sleep ' + (delayMs / 1000));
+    if (delayMs > 0) {
+        const safeDelay = parseFloat(delayMs / 1000) || 0;
+        require('child_process').execSync(`sleep ${safeDelay}`);
+    }
 
     var script = getLoopScript();
     console.log('[Lifecycle] Starting: node ' + path.relative(WORKSPACE_ROOT, script) + ' --loop');
@@ -129,7 +138,11 @@ function status() {
 function tailLog(lines) {
     if (!fs.existsSync(LOG_FILE)) return { error: 'No log file' };
     try {
-        return { file: path.relative(WORKSPACE_ROOT, LOG_FILE), content: execSync('tail -n ' + (lines || 20) + ' "' + LOG_FILE + '"', { encoding: 'utf8' }) };
+        const n = parseInt(lines, 10) || 20;
+        return {
+            file: path.relative(WORKSPACE_ROOT, LOG_FILE),
+            content: require('child_process').execSync(`tail -n ${n} "${LOG_FILE}"`, { encoding: 'utf8' })
+        };
     } catch (e) {
         return { error: e.message };
     }

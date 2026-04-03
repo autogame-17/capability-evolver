@@ -75,7 +75,9 @@ function matchAnyExact(rel, exacts) {
 function matchAnyRegex(rel, regexList) {
   for (const raw of Array.isArray(regexList) ? regexList : []) {
     try {
-      if (new RegExp(String(raw), 'i').test(rel)) return true;
+      const s = String(raw);
+      if (s.length > 1024) continue; // Safety check for ReDoS
+      if (new RegExp(s, 'i').test(rel)) return true;
     } catch (_) {
       console.warn('[policyCheck] matchAnyRegex invalid pattern:', raw, _ && _.message || _);
     }
