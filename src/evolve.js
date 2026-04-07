@@ -96,6 +96,7 @@ const MEMORY_DIR = getMemoryDir();
 const AGENT_NAME = process.env.AGENT_NAME || 'main';
 const AGENT_SESSIONS_DIR = path.join(os.homedir(), `.openclaw/agents/${AGENT_NAME}/sessions`);
 const CURSOR_TRANSCRIPTS_DIR = process.env.EVOLVER_CURSOR_TRANSCRIPTS_DIR || '';
+const SESSION_SOURCE = (process.env.EVOLVER_SESSION_SOURCE || 'auto').toLowerCase();
 const TODAY_LOG = path.join(MEMORY_DIR, new Date().toISOString().split('T')[0] + '.md');
 
 // Ensure memory directory exists so state/cache writes work.
@@ -363,70 +364,97 @@ function readCursorTranscripts() {
   }
 }
 
+function readOpenClawSessions() {
+  if (!fs.existsSync(AGENT_SESSIONS_DIR)) return '';
+  const now = Date.now();
+  const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
+  const TARGET_BYTES = 120000;
+  const PER_SESSION_BYTES = 20000;
+
+  const sessionScope = getSessionScope();
+
+  let files = fs
+    .readdirSync(AGENT_SESSIONS_DIR)
+    .filter(f => f.endsWith('.jsonl') && !f.includes('.lock'))
+    .map(f => {
+      try {
+        const st = fs.statSync(path.join(AGENT_SESSIONS_DIR, f));
+        return { name: f, time: st.mtime.getTime(), size: st.size };
+      } catch (e) {
+        return null;
+      }
+    })
+    .filter(f => f && (now - f.time) < ACTIVE_WINDOW_MS)
+    .sort((a, b) => b.time - a.time);
+
+  if (files.length === 0) return '';
+
+  let nonEvolverFiles = files.filter(f => !f.name.startsWith('evolver_hand_'));
+
+  if (sessionScope && nonEvolverFiles.length > 0) {
+    const scopeLower = sessionScope.toLowerCase();
+    const scopedFiles = nonEvolverFiles.filter(f => f.name.toLowerCase().includes(scopeLower));
+    if (scopedFiles.length > 0) {
+      nonEvolverFiles = scopedFiles;
+      console.log(`[SessionScope] Filtered to ${scopedFiles.length} session(s) matching scope "${sessionScope}".`);
+    } else {
+      console.log(`[SessionScope] No sessions match scope "${sessionScope}". Using all ${nonEvolverFiles.length} session(s) (fallback).`);
+    }
+  }
+
+  const activeFiles = nonEvolverFiles.length > 0 ? nonEvolverFiles : files.slice(0, 1);
+  const maxSessions = Math.min(activeFiles.length, 6);
+  const sections = [];
+  let totalBytes = 0;
+
+  for (let i = 0; i < maxSessions && totalBytes < TARGET_BYTES; i++) {
+    const f = activeFiles[i];
+    const bytesLeft = TARGET_BYTES - totalBytes;
+    const readSize = Math.min(PER_SESSION_BYTES, bytesLeft);
+    const raw = readRecentLog(path.join(AGENT_SESSIONS_DIR, f.name), readSize);
+    const formatted = formatSessionLog(raw);
+    if (formatted.trim()) {
+      sections.push(`--- SESSION (${f.name}) ---\n${formatted}`);
+      totalBytes += formatted.length;
+    }
+  }
+
+  return sections.join('\n\n');
+}
+
 function readRealSessionLog() {
   try {
-    // Primary source: OpenClaw session logs (.jsonl)
-    if (fs.existsSync(AGENT_SESSIONS_DIR)) {
-      const now = Date.now();
-      const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 hours
-      const TARGET_BYTES = 120000;
-      const PER_SESSION_BYTES = 20000;
+    // SESSION_SOURCE controls which transcript source to use:
+    //   'auto'     = OpenClaw primary, Cursor/Codex/Manus fallback (backward compat)
+    //   'cursor'   = Cursor/Codex/Manus transcripts only (skip OpenClaw)
+    //   'openclaw' = OpenClaw sessions only (explicit)
+    //   'merge'    = combine both sources, newest sections first
 
-      const sessionScope = getSessionScope();
-
-      let files = fs
-        .readdirSync(AGENT_SESSIONS_DIR)
-        .filter(f => f.endsWith('.jsonl') && !f.includes('.lock'))
-        .map(f => {
-          try {
-            const st = fs.statSync(path.join(AGENT_SESSIONS_DIR, f));
-            return { name: f, time: st.mtime.getTime(), size: st.size };
-          } catch (e) {
-            return null;
-          }
-        })
-        .filter(f => f && (now - f.time) < ACTIVE_WINDOW_MS)
-        .sort((a, b) => b.time - a.time);
-
-      if (files.length > 0) {
-        let nonEvolverFiles = files.filter(f => !f.name.startsWith('evolver_hand_'));
-
-        if (sessionScope && nonEvolverFiles.length > 0) {
-          const scopeLower = sessionScope.toLowerCase();
-          const scopedFiles = nonEvolverFiles.filter(f => f.name.toLowerCase().includes(scopeLower));
-          if (scopedFiles.length > 0) {
-            nonEvolverFiles = scopedFiles;
-            console.log(`[SessionScope] Filtered to ${scopedFiles.length} session(s) matching scope "${sessionScope}".`);
-          } else {
-            console.log(`[SessionScope] No sessions match scope "${sessionScope}". Using all ${nonEvolverFiles.length} session(s) (fallback).`);
-          }
-        }
-
-        const activeFiles = nonEvolverFiles.length > 0 ? nonEvolverFiles : files.slice(0, 1);
-
-        const maxSessions = Math.min(activeFiles.length, 6);
-        const sections = [];
-        let totalBytes = 0;
-
-        for (let i = 0; i < maxSessions && totalBytes < TARGET_BYTES; i++) {
-          const f = activeFiles[i];
-          const bytesLeft = TARGET_BYTES - totalBytes;
-          const readSize = Math.min(PER_SESSION_BYTES, bytesLeft);
-          const raw = readRecentLog(path.join(AGENT_SESSIONS_DIR, f.name), readSize);
-          const formatted = formatSessionLog(raw);
-          if (formatted.trim()) {
-            sections.push(`--- SESSION (${f.name}) ---\n${formatted}`);
-            totalBytes += formatted.length;
-          }
-        }
-
-        if (sections.length > 0) {
-          return sections.join('\n\n');
-        }
-      }
+    if (SESSION_SOURCE === 'cursor') {
+      const content = readCursorTranscripts();
+      if (content) return content;
+      return '[NO SESSION LOGS FOUND]';
     }
 
-    // Fallback: Cursor agent-transcripts (.txt)
+    if (SESSION_SOURCE === 'openclaw') {
+      const content = readOpenClawSessions();
+      if (content) return content;
+      return '[NO SESSION LOGS FOUND]';
+    }
+
+    if (SESSION_SOURCE === 'merge') {
+      const ocContent = readOpenClawSessions();
+      const cursorContent = readCursorTranscripts();
+      if (ocContent && cursorContent) {
+        return ocContent + '\n\n' + cursorContent;
+      }
+      return ocContent || cursorContent || '[NO SESSION LOGS FOUND]';
+    }
+
+    // 'auto' (default): OpenClaw primary, Cursor fallback
+    const ocContent = readOpenClawSessions();
+    if (ocContent) return ocContent;
+
     const cursorContent = readCursorTranscripts();
     if (cursorContent) {
       console.log('[SessionFallback] Using Cursor agent-transcripts as session source.');
@@ -902,18 +930,30 @@ function getDefaultLoadMax() {
 }
 
 // Check how many agent sessions are actively being processed (modified in the last N minutes).
-// If the agent is busy with user conversations, evolver should back off.
+// Counts across both OpenClaw sessions and Cursor/Codex/Manus transcripts.
 function getRecentActiveSessionCount(windowMs) {
+  let count = 0;
+  const now = Date.now();
+  const w = Number.isFinite(windowMs) ? windowMs : 10 * 60 * 1000;
+
   try {
-    if (!fs.existsSync(AGENT_SESSIONS_DIR)) return 0;
-    const now = Date.now();
-    const w = Number.isFinite(windowMs) ? windowMs : 10 * 60 * 1000;
-    return fs.readdirSync(AGENT_SESSIONS_DIR)
-      .filter(f => f.endsWith('.jsonl') && !f.includes('.lock') && !f.startsWith('evolver_hand_'))
-      .filter(f => {
-        try { return (now - fs.statSync(path.join(AGENT_SESSIONS_DIR, f)).mtimeMs) < w; } catch (_) { return false; }
-      }).length;
-  } catch (_) { return 0; }
+    if (fs.existsSync(AGENT_SESSIONS_DIR)) {
+      count += fs.readdirSync(AGENT_SESSIONS_DIR)
+        .filter(f => f.endsWith('.jsonl') && !f.includes('.lock') && !f.startsWith('evolver_hand_'))
+        .filter(f => {
+          try { return (now - fs.statSync(path.join(AGENT_SESSIONS_DIR, f)).mtimeMs) < w; } catch (_) { return false; }
+        }).length;
+    }
+  } catch (_) {}
+
+  try {
+    if (CURSOR_TRANSCRIPTS_DIR && fs.existsSync(CURSOR_TRANSCRIPTS_DIR)) {
+      const transcriptFiles = collectTranscriptFiles(CURSOR_TRANSCRIPTS_DIR, 3);
+      count += transcriptFiles.filter(f => (now - f.time) < w).length;
+    }
+  } catch (_) {}
+
+  return count;
 }
 
 function determineBridgeEnabled() {
@@ -931,7 +971,7 @@ async function runPreflightChecks(bridgeEnabled, loopMode) {
   if (process.platform !== 'win32') {
     try {
       const _psRace = require('child_process').execSync(
-        'ps aux | grep "evolver_hand_" | grep "openclaw.*agent" | grep -v grep',
+        'ps aux | grep "evolver_hand_" | grep -v grep',
         { encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] }
       ).trim();
       if (_psRace && _psRace.length > 0) {
