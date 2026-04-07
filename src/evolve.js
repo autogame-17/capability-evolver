@@ -118,31 +118,42 @@ function formatSessionLog(jsonlContent) {
     }
   };
 
+  function extractContent(data) {
+    // Claude Code: content is array of {type, text/tool_use/tool_result/thinking}
+    // OpenClaw: similar structure under data.message.content
+    const msg = data.message || {};
+    const raw = msg.content || data.content;
+    if (Array.isArray(raw)) {
+      return raw.map(c => {
+        if (c.type === 'text') return c.text || '';
+        if (c.type === 'tool_use') return `[TOOL: ${c.name || 'unknown'}]`;
+        if (c.type === 'tool_result') return c.is_error ? `[TOOL ERROR] ${String(c.content || '').slice(0, 200)}` : '';
+        if (c.type === 'thinking') return ''; // skip thinking blocks
+        return '';
+      }).filter(Boolean).join(' ');
+    }
+    if (typeof raw === 'string') return raw;
+    return '';
+  }
+
   for (const line of lines) {
     if (!line.trim()) continue;
     try {
       const data = JSON.parse(line);
       let entry = '';
 
-      if (data.type === 'message' && data.message) {
-        const role = (data.message.role || 'unknown').toUpperCase();
-        let content = '';
-        if (Array.isArray(data.message.content)) {
-          content = data.message.content
-            .map(c => {
-              if (c.type === 'text') return c.text;
-              if (c.type === 'toolCall') return `[TOOL: ${c.name}]`;
-              return '';
-            })
-            .join(' ');
-        } else if (typeof data.message.content === 'string') {
-          content = data.message.content;
-        } else {
-          content = JSON.stringify(data.message.content);
-        }
+      // Claude Code format: top-level type is 'user', 'assistant', 'tool_result', etc.
+      // OpenClaw format: top-level type is 'message' wrapping role/content
+      const isClaudeCode = data.type === 'user' || data.type === 'assistant';
+      const isOpenClaw = data.type === 'message' && data.message;
+      const isToolResult = data.type === 'tool_result' || (data.message && data.message.role === 'toolResult');
+
+      if (isClaudeCode || isOpenClaw) {
+        const role = ((data.message && data.message.role) || data.type || 'unknown').toUpperCase();
+        let content = extractContent(data);
 
         // Capture LLM errors from errorMessage field (e.g. "Unsupported MIME type: image/gif")
-        if (data.message.errorMessage) {
+        if (data.message && data.message.errorMessage) {
           const errMsg = typeof data.message.errorMessage === 'string'
             ? data.message.errorMessage
             : JSON.stringify(data.message.errorMessage);
@@ -151,12 +162,16 @@ function formatSessionLog(jsonlContent) {
 
         // Filter: Skip Heartbeats to save noise
         if (content.trim() === 'HEARTBEAT_OK') continue;
-        if (content.includes('NO_REPLY') && !data.message.errorMessage) continue;
+        if (content.includes('NO_REPLY') && !(data.message && data.message.errorMessage)) continue;
+        // Filter: Skip Claude Code internal meta messages
+        if (data.isMeta) continue;
 
         // Clean up newlines for compact reading
         content = content.replace(/\n+/g, ' ').slice(0, 300);
-        entry = `**${role}**: ${content}`;
-      } else if (data.type === 'tool_result' || (data.message && data.message.role === 'toolResult')) {
+        if (content.trim()) {
+          entry = `**${role}**: ${content}`;
+        }
+      } else if (isToolResult) {
         // Filter: Skip generic success results or short uninformative ones
         // Only show error or significant output
         let resContent = '';
@@ -244,7 +259,9 @@ function readCursorTranscripts() {
     if (!fs.existsSync(CURSOR_TRANSCRIPTS_DIR)) return '';
 
     const now = Date.now();
-    const ACTIVE_WINDOW_MS = 24 * 60 * 60 * 1000;
+    // Claude Code session logs (.jsonl) are write-once — mtime never updates
+    // after the session ends, so use a 7-day window instead of 24h.
+    const ACTIVE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
     const TARGET_BYTES = 120000;
     const PER_FILE_BYTES = 20000;
     const RECENCY_GUARD_MS = 30 * 1000;
@@ -282,9 +299,13 @@ function readCursorTranscripts() {
       const readSize = Math.min(PER_FILE_BYTES, bytesLeft);
       const raw = readRecentLog(path.join(CURSOR_TRANSCRIPTS_DIR, f.name), readSize);
       if (raw.trim() && !raw.startsWith('[MISSING]')) {
-        const formatted = formatCursorTranscript(raw);
+        // Use JSON-aware formatter for .jsonl files (Claude Code, OpenClaw),
+        // plain-text formatter for .txt files (Cursor agent-transcripts).
+        const isJsonl = f.name.endsWith('.jsonl');
+        const formatted = isJsonl ? formatSessionLog(raw) : formatCursorTranscript(raw);
         if (formatted.trim()) {
-          sections.push(`--- CURSOR SESSION (${f.name}) ---\n${formatted}`);
+          const label = isJsonl ? 'SESSION' : 'CURSOR SESSION';
+          sections.push(`--- ${label} (${f.name}) ---\n${formatted}`);
           totalBytes += formatted.length;
         }
       }
