@@ -1,6 +1,6 @@
 {
   "name": "@evomap/evolver",
-  "version": "1.49.0",
+  "version": "1.50.0",
   "description": "A GEP-powered self-evolution engine for AI agents. Features automated log analysis and Genome Evolution Protocol (GEP) for auditable, reusable evolution assets.",
   "main": "index.js",
   "bin": {
@@ -17,7 +17,7 @@
     "agent"
   ],
   "author": "EvoMap <team@evomap.ai>",
-  "license": "MIT",
+  "license": "GPL-3.0-or-later",
   "repository": {
     "type": "git",
     "url": "https://github.com/EvoMap/evolver.git"

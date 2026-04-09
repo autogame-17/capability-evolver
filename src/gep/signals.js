@@ -136,27 +136,190 @@ function analyzeRecentHistory(recentEvents) {
   };
 }
 
-function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, userSnippet, recentEvents }) {
+// ---------------------------------------------------------------------------
+// Signal Extraction Strategy: Weighted Keyword Scoring (Layer 2)
+// Unlike regex (binary hit/miss), keyword scoring accumulates weighted
+// evidence from multiple keywords and fires only when confidence exceeds
+// a threshold. This catches fuzzy/distributed patterns that no single
+// regex can match.
+// ---------------------------------------------------------------------------
+var SIGNAL_PROFILES = {
+  perf_bottleneck: {
+    keywords: { 'slow': 3, 'timeout': 4, 'timed out': 4, 'latency': 3, 'bottleneck': 5,
+                'lag': 2, 'delay': 2, 'hung': 3, 'freeze': 3, 'unresponsive': 4,
+                'took too long': 4, 'high cpu': 4, 'high memory': 4, 'oom': 5,
+                'out of memory': 5, 'performance': 2, 'throttle': 3 },
+    threshold: 6,
+  },
+  capability_gap: {
+    keywords: { 'not supported': 5, 'cannot': 1, 'unsupported': 4, 'not implemented': 5,
+                'no way to': 3, 'missing feature': 5, 'not available': 3,
+                'no support for': 4, 'unavailable': 3, 'incompatible': 3 },
+    threshold: 5,
+  },
+  user_feature_request: {
+    keywords: { 'add': 1, 'implement': 3, 'create': 2, 'build': 2, 'feature': 3,
+                'i want': 3, 'i need': 3, 'we need': 3, 'please add': 4,
+                'new function': 4, 'new module': 4, 'endpoint': 2, 'capability': 2,
+                'support for': 2 },
+    threshold: 6,
+  },
+  user_improvement_suggestion: {
+    keywords: { 'improve': 3, 'enhance': 3, 'upgrade': 3, 'refactor': 4,
+                'clean up': 3, 'simplify': 3, 'streamline': 3, 'optimize': 3,
+                'could be better': 4, 'should be': 2, 'more efficient': 3 },
+    threshold: 5,
+  },
+  recurring_error: {
+    keywords: { 'error': 1, 'exception': 2, 'failed': 1, 'crash': 4,
+                'again': 1, 'still': 1, 'keeps': 2, 'repeatedly': 4,
+                'same error': 5, 'still failing': 5, 'not fixed': 4 },
+    threshold: 7,
+  },
+  tool_bypass: {
+    keywords: { 'exec': 2, 'shell': 2, 'subprocess': 3, 'child_process': 3,
+                'curl': 2, 'wget': 2, 'ad-hoc': 3, 'workaround': 3,
+                'hack': 2, 'manual': 1 },
+    threshold: 6,
+  },
+  evolution_stagnation_detected: {
+    keywords: { 'no change': 4, 'same result': 4, 'stuck': 3, 'plateau': 4,
+                'stagnant': 5, 'no progress': 5, 'spinning': 3, 'idle': 2,
+                'nothing new': 4, 'exhausted': 3 },
+    threshold: 6,
+  },
+};
+
+function _extractKeywordScore(lower) {
+  var scored = [];
+  var profileKeys = Object.keys(SIGNAL_PROFILES);
+  for (var pi = 0; pi < profileKeys.length; pi++) {
+    var signalName = profileKeys[pi];
+    var profile = SIGNAL_PROFILES[signalName];
+    var totalScore = 0;
+    var kwKeys = Object.keys(profile.keywords);
+    for (var ki = 0; ki < kwKeys.length; ki++) {
+      var kw = kwKeys[ki];
+      var weight = profile.keywords[kw];
+      var idx = 0;
+      var count = 0;
+      while (idx < lower.length && count < 20) {
+        var pos = lower.indexOf(kw, idx);
+        if (pos === -1) break;
+        count++;
+        idx = pos + kw.length;
+      }
+      totalScore += count * weight;
+    }
+    if (totalScore >= profile.threshold) {
+      scored.push(signalName);
+    }
+  }
+  return scored;
+}
+
+// ---------------------------------------------------------------------------
+// Signal Extraction Strategy: LLM Semantic Analysis (Layer 3)
+// Sends a corpus summary to the Hub for LLM-based signal extraction.
+// Rate-limited to every N evolution cycles. Falls back silently on failure.
+// ---------------------------------------------------------------------------
+var _llmSignalCycleCount = 0;
+var LLM_SIGNAL_INTERVAL = 5;
+
+function _extractLLM(corpus) {
+  _llmSignalCycleCount++;
+  if (_llmSignalCycleCount % LLM_SIGNAL_INTERVAL !== 1) return [];
+
+  try {
+    var getHubUrl = require('./a2aProtocol').getHubUrl;
+    var getHubNodeSecret = require('./a2aProtocol').getHubNodeSecret;
+    var getNodeId = require('./a2aProtocol').getNodeId;
+    var hubUrl = getHubUrl();
+    var nodeSecret = getHubNodeSecret();
+    if (!hubUrl || !nodeSecret) return [];
+
+    var summary = corpus.slice(0, 2000);
+    var postData = JSON.stringify({
+      corpus_summary: summary,
+      signal_types: OPPORTUNITY_SIGNALS,
+      sender_id: getNodeId() || undefined,
+    });
+
+    var url = hubUrl + '/a2a/signal/analyze';
+
+    // Use execSync + curl for truly synchronous HTTP. Node's http.request() is
+    // async and its callbacks cannot fire inside a synchronous spin-wait loop
+    // because execSync blocks the event loop.
+    var curlCmd = 'curl -s -m 10 -X POST'
+      + ' -H "Content-Type: application/json"'
+      + ' -H "Authorization: Bearer ' + nodeSecret + '"'
+      + ' -d ' + JSON.stringify(postData).replace(/'/g, "'\\''")
+      + ' ' + JSON.stringify(url);
+
+    var execSync = require('child_process').execSync;
+    var stdout = '';
+    try {
+      stdout = execSync(curlCmd, {
+        timeout: 12000,
+        windowsHide: true,
+        stdio: ['pipe', 'pipe', 'pipe'],
+        encoding: 'utf8',
+      });
+    } catch (_) {
+      return [];
+    }
+
+    if (!stdout || typeof stdout !== 'string') return [];
+
+    var parsed = JSON.parse(stdout);
+    if (Array.isArray(parsed.signals)) {
+      return parsed.signals.filter(function (s) {
+        return typeof s === 'string' && s.length > 0 && s.length < 200;
+      }).slice(0, 10);
+    }
+    return [];
+  } catch (e) {
+    return [];
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Signal Merge: combine results from all extraction strategies.
+// Deduplicates and logs per-layer contribution for observability.
+// ---------------------------------------------------------------------------
+function _mergeSignals(regexSignals, scoreSignals, llmSignals) {
+  var merged = new Set();
+  var ri, si, li;
+  for (ri = 0; ri < regexSignals.length; ri++) merged.add(regexSignals[ri]);
+  for (si = 0; si < scoreSignals.length; si++) merged.add(scoreSignals[si]);
+  for (li = 0; li < llmSignals.length; li++) merged.add(llmSignals[li]);
+
+  var scoreOnly = scoreSignals.filter(function (s) { return !regexSignals.includes(s); });
+  var llmOnly = llmSignals.filter(function (s) { return !regexSignals.includes(s) && !scoreSignals.includes(s); });
+  var overlap = regexSignals.filter(function (s) { return scoreSignals.includes(s) || llmSignals.includes(s); });
+
+  if (scoreOnly.length > 0 || llmOnly.length > 0 || overlap.length > 0) {
+    console.log('[Signals] Multi-strategy: regex=' + regexSignals.length +
+      ', score=' + scoreSignals.length +
+      ', llm=' + llmSignals.length +
+      ', merged=' + merged.size +
+      (scoreOnly.length > 0 ? ' | score-only: ' + scoreOnly.join(', ') : '') +
+      (llmOnly.length > 0 ? ' | llm-only: ' + llmOnly.join(', ') : '') +
+      (overlap.length > 0 ? ' | confirmed: ' + overlap.join(', ') : ''));
+  }
+
+  return Array.from(merged);
+}
+
+// ---------------------------------------------------------------------------
+// Signal Extraction Strategy: Regex Pattern Matching (Layer 1)
+// Deterministic, zero-latency, hand-crafted rules for known signal patterns.
+// ---------------------------------------------------------------------------
+function _extractRegex(corpus, lower, errorHit) {
   var signals = [];
-  var corpus = [
-    String(recentSessionTranscript || ''),
-    String(todayLog || ''),
-    String(memorySnippet || ''),
-    String(userSnippet || ''),
-  ].join('\n');
-  var lower = corpus.toLowerCase();
 
-  // Analyze recent evolution history for de-duplication
-  var history = analyzeRecentHistory(recentEvents || []);
-
-  // --- Defensive signals (errors, missing resources) ---
-
-  // Refined error detection regex to avoid false positives on "fail"/"failed" in normal text.
-  // We prioritize structured error markers ([error], error:, exception:) and specific JSON patterns.
-  var errorHit = /\[error\]|error:|exception:|iserror":true|"status":\s*"error"|"status":\s*"failed"|错误\s*[：:]|异常\s*[：:]|报错\s*[：:]|失败\s*[：:]/.test(lower);
   if (errorHit) signals.push('log_error');
 
-  // Error signature (more reproducible than a coarse "log_error" tag).
   try {
     var lines = corpus
       .split('\n')
@@ -335,21 +498,55 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
     }
   }
 
-  // --- Signal prioritization ---
-  // Remove cosmetic signals when actionable signals exist
+  return signals;
+}
+
+// ---------------------------------------------------------------------------
+// extractSignals: Multi-strategy orchestrator.
+// Calls three extraction layers (regex, keyword scoring, LLM semantic),
+// merges their outputs, then applies post-processing (prioritization,
+// history-based dedup, innovation forcing).
+// Signature and return type are unchanged -- callers are not affected.
+// ---------------------------------------------------------------------------
+function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, userSnippet, recentEvents }) {
+  var corpus = [
+    String(recentSessionTranscript || ''),
+    String(todayLog || ''),
+    String(memorySnippet || ''),
+    String(userSnippet || ''),
+  ].join('\n');
+  var lower = corpus.toLowerCase();
+
+  var history = analyzeRecentHistory(recentEvents || []);
+
+  var errorHit = /\[error\]|error:|exception:|iserror":true|"status":\s*"error"|"status":\s*"failed"|错误\s*[：:]|异常\s*[：:]|报错\s*[：:]|失败\s*[：:]/.test(lower);
+
+  // Layer 1: Regex (deterministic, 0ms)
+  var regexSignals = _extractRegex(corpus, lower, errorHit);
+
+  // Layer 2: Weighted keyword scoring (statistical, 0ms)
+  var scoreSignals = _extractKeywordScore(lower);
+
+  // Layer 3: LLM semantic analysis (rate-limited, async, optional)
+  var llmSignals = _extractLLM(corpus);
+
+  // Merge all layers
+  var signals = _mergeSignals(regexSignals, scoreSignals, llmSignals);
+
+  // --- Post-processing (applies to merged signal set) ---
+
+  // Signal prioritization: remove cosmetic signals when actionable ones exist
   var actionable = signals.filter(function (s) {
     return s !== 'user_missing' && s !== 'memory_missing' && s !== 'session_logs_missing' && s !== 'windows_shell_incompatible';
   });
-  // If we have actionable signals, drop the cosmetic ones
   if (actionable.length > 0) {
     signals = actionable;
   }
 
-  // --- De-duplication: suppress signals that have been over-processed ---
+  // De-duplication: suppress signals that have been over-processed in recent history
   if (history.suppressedSignals.size > 0) {
     var beforeDedup = signals.length;
     signals = signals.filter(function (s) {
-      // Normalize signal key for comparison
       var key = s.startsWith('errsig:') ? 'errsig'
         : s.startsWith('recurring_errsig') ? 'recurring_errsig'
         : s.startsWith('user_feature_request:') ? 'user_feature_request'
@@ -358,16 +555,13 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
       return !history.suppressedSignals.has(key);
     });
     if (beforeDedup > 0 && signals.length === 0) {
-      // All signals were suppressed = system is stable but stuck in a loop
-      // Force innovation
       signals.push('evolution_stagnation_detected');
       signals.push('stable_success_plateau');
     }
   }
 
-  // --- Force innovation after 3+ consecutive repairs ---
+  // Force innovation after 3+ consecutive repairs
   if (history.consecutiveRepairCount >= 3) {
-    // Remove repair-only signals (log_error, errsig) and inject innovation signals
     signals = signals.filter(function (s) {
       return s !== 'log_error' && !s.startsWith('errsig:') && !s.startsWith('recurring_errsig');
     });
@@ -375,13 +569,10 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
       signals.push('repair_loop_detected');
       signals.push('stable_success_plateau');
     }
-    // Append a directive signal that the prompt can pick up
     signals.push('force_innovation_after_repair_loop');
   }
 
-  // --- Force innovation after too many empty cycles (zero blast radius) ---
-  // If >= 50% of last 8 cycles produced no code changes, the evolver is spinning idle.
-  // Strip repair signals and force innovate to break the empty loop.
+  // Force innovation after too many empty cycles (zero blast radius)
   if (history.emptyCycleCount >= 4) {
     signals = signals.filter(function (s) {
       return s !== 'log_error' && !s.startsWith('errsig:') && !s.startsWith('recurring_errsig');
@@ -390,12 +581,7 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
     if (!signals.includes('stable_success_plateau')) signals.push('stable_success_plateau');
   }
 
-  // --- Saturation detection (graceful degradation) ---
-  // When consecutive empty cycles pile up at the tail, the evolver has exhausted its
-  // innovation space. Instead of spinning idle forever, signal that the system should
-  // switch to steady-state maintenance mode with reduced evolution frequency.
-  // This directly addresses the Echo-MingXuan failure: Cycle #55 hit "no committable
-  // code changes" and load spiked to 1.30 because there was no degradation strategy.
+  // Saturation detection (graceful degradation)
   if (history.consecutiveEmptyCycles >= 5) {
     if (!signals.includes('force_steady_state')) signals.push('force_steady_state');
     if (!signals.includes('evolution_saturation')) signals.push('evolution_saturation');
@@ -403,15 +589,11 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
     if (!signals.includes('evolution_saturation')) signals.push('evolution_saturation');
   }
 
-  // --- Failure streak awareness ---
-  // When the evolver has failed many consecutive cycles, inject a signal
-  // telling the LLM to be more conservative and avoid repeating the same approach.
+  // Failure streak awareness
   if (history.consecutiveFailureCount >= 3) {
     signals.push('consecutive_failure_streak_' + history.consecutiveFailureCount);
-    // After 5+ consecutive failures, force a strategy change (don't keep trying the same thing)
     if (history.consecutiveFailureCount >= 5) {
       signals.push('failure_loop_detected');
-      // Strip the dominant gene's signals to force a different gene selection
       var topGene = null;
       var topGeneCount = 0;
       var gfEntries = Object.entries(history.geneFreq);
@@ -441,4 +623,8 @@ function extractSignals({ recentSessionTranscript, todayLog, memorySnippet, user
   return Array.from(new Set(signals));
 }
 
-module.exports = { extractSignals, hasOpportunitySignal, analyzeRecentHistory, OPPORTUNITY_SIGNALS };
+module.exports = {
+  extractSignals, hasOpportunitySignal, analyzeRecentHistory,
+  OPPORTUNITY_SIGNALS, SIGNAL_PROFILES,
+  _extractRegex, _extractKeywordScore, _extractLLM, _mergeSignals,
+};

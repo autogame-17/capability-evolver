@@ -1,6 +1,6 @@
 const { describe, it } = require('node:test');
 const assert = require('node:assert/strict');
-const { extractSignals } = require('../src/gep/signals');
+const { extractSignals, _extractKeywordScore, _mergeSignals, SIGNAL_PROFILES, _extractRegex } = require('../src/gep/signals');
 
 const emptyInput = {
   recentSessionTranscript: '',
@@ -317,6 +317,163 @@ describe('extractSignals -- windows_shell_incompatible', () => {
         'cosmetic signal should be dropped when actionable signals exist, got: ' + JSON.stringify(r));
     } finally {
       restorePlatform();
+    }
+  });
+});
+
+// ===========================================================================
+// Multi-strategy signal extraction tests
+// ===========================================================================
+
+describe('_extractKeywordScore -- weighted keyword scoring (Layer 2)', () => {
+  it('SIGNAL_PROFILES is defined with expected keys', () => {
+    assert.ok(typeof SIGNAL_PROFILES === 'object');
+    assert.ok('perf_bottleneck' in SIGNAL_PROFILES);
+    assert.ok('capability_gap' in SIGNAL_PROFILES);
+    assert.ok('user_feature_request' in SIGNAL_PROFILES);
+    assert.ok('user_improvement_suggestion' in SIGNAL_PROFILES);
+    assert.ok('recurring_error' in SIGNAL_PROFILES);
+    assert.ok('tool_bypass' in SIGNAL_PROFILES);
+    assert.ok('evolution_stagnation_detected' in SIGNAL_PROFILES);
+  });
+
+  it('each profile has keywords and threshold', () => {
+    for (const [name, profile] of Object.entries(SIGNAL_PROFILES)) {
+      assert.ok(typeof profile.keywords === 'object', name + ' missing keywords');
+      assert.ok(typeof profile.threshold === 'number' && profile.threshold > 0, name + ' missing valid threshold');
+      assert.ok(Object.keys(profile.keywords).length > 0, name + ' has empty keywords');
+    }
+  });
+
+  it('detects perf_bottleneck from accumulated keywords', () => {
+    const corpus = 'the system is slow and has high latency, queries timeout frequently and the bottleneck is the database';
+    const r = _extractKeywordScore(corpus.toLowerCase());
+    assert.ok(r.includes('perf_bottleneck'), 'expected perf_bottleneck, got ' + JSON.stringify(r));
+  });
+
+  it('does not fire perf_bottleneck on a single weak keyword', () => {
+    const corpus = 'there was a minor delay in the response';
+    const r = _extractKeywordScore(corpus.toLowerCase());
+    assert.ok(!r.includes('perf_bottleneck'), 'single weak keyword should not fire perf_bottleneck');
+  });
+
+  it('detects capability_gap from accumulated keywords', () => {
+    const corpus = 'this feature is not supported and the API is not available for this use case. it is not implemented.';
+    const r = _extractKeywordScore(corpus.toLowerCase());
+    assert.ok(r.includes('capability_gap'), 'expected capability_gap, got ' + JSON.stringify(r));
+  });
+
+  it('detects user_feature_request from accumulated keywords', () => {
+    const corpus = 'we need to implement a new feature, i want to add support for the endpoint, please add a new capability';
+    const r = _extractKeywordScore(corpus.toLowerCase());
+    assert.ok(r.includes('user_feature_request'), 'expected user_feature_request, got ' + JSON.stringify(r));
+  });
+
+  it('detects user_improvement_suggestion from keywords', () => {
+    const corpus = 'we should improve the codebase, refactor the module, and streamline the process to be more efficient';
+    const r = _extractKeywordScore(corpus.toLowerCase());
+    assert.ok(r.includes('user_improvement_suggestion'), 'expected user_improvement_suggestion, got ' + JSON.stringify(r));
+  });
+
+  it('detects recurring_error from keywords', () => {
+    const corpus = 'the same error keeps happening repeatedly, it crashed again, still failing after the fix, exception not fixed';
+    const r = _extractKeywordScore(corpus.toLowerCase());
+    assert.ok(r.includes('recurring_error'), 'expected recurring_error, got ' + JSON.stringify(r));
+  });
+
+  it('detects evolution_stagnation_detected from keywords', () => {
+    const corpus = 'no change in the output, same result every time, stuck on this plateau with no progress at all';
+    const r = _extractKeywordScore(corpus.toLowerCase());
+    assert.ok(r.includes('evolution_stagnation_detected'), 'expected evolution_stagnation_detected, got ' + JSON.stringify(r));
+  });
+
+  it('returns empty for neutral text', () => {
+    const corpus = 'the sun is shining today and the weather is nice. the cat sat on the mat.';
+    const r = _extractKeywordScore(corpus.toLowerCase());
+    assert.ok(r.length === 0, 'neutral text should not trigger signals, got ' + JSON.stringify(r));
+  });
+
+  it('can fire multiple signals from mixed corpus', () => {
+    const corpus = 'the system is slow with high latency timeout. also this feature is not supported and not implemented.';
+    const r = _extractKeywordScore(corpus.toLowerCase());
+    assert.ok(r.includes('perf_bottleneck'), 'expected perf_bottleneck');
+    assert.ok(r.includes('capability_gap'), 'expected capability_gap');
+  });
+});
+
+describe('_mergeSignals -- signal merge and dedup', () => {
+  it('merges three non-overlapping arrays', () => {
+    const r = _mergeSignals(['a', 'b'], ['c', 'd'], ['e']);
+    assert.deepStrictEqual(r.sort(), ['a', 'b', 'c', 'd', 'e']);
+  });
+
+  it('deduplicates across layers', () => {
+    const r = _mergeSignals(['a', 'b'], ['b', 'c'], ['c', 'd']);
+    assert.deepStrictEqual(r.sort(), ['a', 'b', 'c', 'd']);
+  });
+
+  it('handles empty arrays', () => {
+    const r = _mergeSignals([], [], []);
+    assert.deepStrictEqual(r, []);
+  });
+
+  it('single-layer only', () => {
+    const r = _mergeSignals(['x', 'y'], [], []);
+    assert.deepStrictEqual(r.sort(), ['x', 'y']);
+  });
+});
+
+describe('_extractRegex -- Layer 1 isolation', () => {
+  it('detects log_error when errorHit is true', () => {
+    const corpus = 'some content';
+    const r = _extractRegex(corpus, corpus.toLowerCase(), true);
+    assert.ok(r.includes('log_error'));
+  });
+
+  it('does not detect log_error when errorHit is false', () => {
+    const corpus = 'everything is fine';
+    const r = _extractRegex(corpus, corpus.toLowerCase(), false);
+    assert.ok(!r.includes('log_error'));
+  });
+
+  it('detects memory_missing', () => {
+    const corpus = 'Warning: memory.md missing';
+    const r = _extractRegex(corpus, corpus.toLowerCase(), false);
+    assert.ok(r.includes('memory_missing'));
+  });
+
+  it('detects perf_bottleneck via regex', () => {
+    const corpus = 'The query has a timeout and is too slow';
+    const r = _extractRegex(corpus, corpus.toLowerCase(), false);
+    assert.ok(r.includes('perf_bottleneck'));
+  });
+});
+
+describe('extractSignals -- multi-strategy integration', () => {
+  it('keyword-scoring adds signals that regex misses', () => {
+    // Corpus with multiple weak perf keywords that individually might not
+    // match the regex pattern but collectively exceed the scoring threshold.
+    const r = extractSignals({
+      ...emptyInput,
+      todayLog: 'request had lag and delay, the system felt sluggish with throttle. performance was degraded.',
+    });
+    assert.ok(hasSignal(r, 'perf_bottleneck'),
+      'keyword scoring should detect perf_bottleneck from accumulated weak keywords, got ' + JSON.stringify(r));
+  });
+
+  it('all signals are deduplicated in final output', () => {
+    const r = extractSignals({
+      ...emptyInput,
+      todayLog: 'Error: connection timeout\nThe system is slow with high latency and bottleneck.',
+    });
+    const counts = {};
+    for (const s of r) {
+      const key = s.split(':')[0];
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    for (const [key, count] of Object.entries(counts)) {
+      if (key === 'errsig' || key === 'user_feature_request' || key === 'user_improvement_suggestion') continue;
+      assert.ok(count === 1, key + ' appeared ' + count + ' times (should be 1)');
     }
   });
 });
