@@ -231,19 +231,19 @@ function selectGene(genes, signals, opts) {
 
   if (scored.length === 0) return { selected: null, alternatives: [], driftIntensity: driftIntensity, driftMode: 'none' };
 
-  // Memory graph preference: only override when the preferred gene is already a match candidate.
-  // Skip memory preference when plateau override is active to force exploration.
+  // Memory graph preference: apply as a score multiplier instead of a hard
+  // override.  The old behavior (`return preferred` unconditionally) caused a
+  // negative-feedback loop: a globally popular gene would be forced onto every
+  // scenario regardless of its pattern score, accumulate mixed outcomes, and
+  // stay preferred indefinitely.  A 1.5x multiplier lets the memory graph
+  // break ties and boost borderline candidates, but never overpower a gene
+  // that genuinely matches the current signals much better.
+  const MEMORY_PREFERENCE_MULTIPLIER = 1.5;
   if (preferredGeneId && !(plateauOverride && plateauOverride.active)) {
-    const preferred = scored.find(x => x.gene && x.gene.id === preferredGeneId);
-    if (preferred && (useDrift || !bannedGeneIds.has(preferredGeneId))) {
-      const rest = scored.filter(x => x.gene && x.gene.id !== preferredGeneId);
-      const filteredRest = useDrift ? rest : rest.filter(x => x.gene && !bannedGeneIds.has(x.gene.id));
-      return {
-        selected: preferred.gene,
-        alternatives: filteredRest.slice(0, 4).map(x => x.gene),
-        driftIntensity: driftIntensity,
-        driftMode: 'memory_preferred',
-      };
+    const idx = scored.findIndex(x => x.gene && x.gene.id === preferredGeneId);
+    if (idx >= 0 && (useDrift || !bannedGeneIds.has(preferredGeneId))) {
+      scored[idx] = { ...scored[idx], score: scored[idx].score * MEMORY_PREFERENCE_MULTIPLIER };
+      scored.sort((a, b) => b.score - a.score);
     }
   }
 

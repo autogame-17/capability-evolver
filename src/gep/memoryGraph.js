@@ -308,7 +308,14 @@ function getMemoryAdvice({ signals, genes, driftEnabled }) {
   }
 
   scoredGeneIds.sort((a, b) => b.score - a.score);
-  const preferredGeneId = scoredGeneIds.length ? scoredGeneIds[0].geneId : null;
+  // Only emit a preference when there is actual outcome evidence.
+  // Without this guard, an arbitrary gene wins by Map iteration order when
+  // all scores are zero (empty or cold-start graph), causing the selector's
+  // hard-override to lock onto an unsupported choice from round 1.
+  const topScored = scoredGeneIds.length ? scoredGeneIds[0] : null;
+  const preferredGeneId = (topScored && topScored.score > 0 && topScored.attempts > 0)
+    ? topScored.geneId
+    : null;
 
   const explanation = [];
   if (preferredGeneId) explanation.push(`memory_prefer:${preferredGeneId}`);
