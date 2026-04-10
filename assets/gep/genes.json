@@ -103,8 +103,84 @@
       "validation": [
         "node scripts/validate-modules.js ./src/evolve ./src/gep/solidify ./src/gep/policyCheck ./src/gep/mutation ./src/gep/personality",
         "node scripts/validate-suite.js"
-      ]
+      ],
+      "learning_history": [
+        {
+          "at": "2026-04-10T12:02:12.872Z",
+          "outcome": "failed",
+          "mode": "soft",
+          "reason_class": "validation",
+          "retryable": true,
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "problem:protocol",
+            "action:optimize",
+            "area:prompt",
+            "problem:capability",
+            "action:innovate",
+            "area:skills",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-10T12:06:30.742Z",
+          "outcome": "failed",
+          "mode": "soft",
+          "reason_class": "validation",
+          "retryable": true,
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "problem:protocol",
+            "action:optimize",
+            "area:prompt",
+            "area:skills",
+            "risk:validation"
+          ]
+        }
+      ],
+      "anti_patterns": [
+        {
+          "at": "2026-04-10T12:02:12.872Z",
+          "mode": "soft",
+          "reason_class": "validation",
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "problem:protocol",
+            "action:optimize",
+            "area:prompt",
+            "problem:capability",
+            "action:innovate",
+            "area:skills"
+          ]
+        },
+        {
+          "at": "2026-04-10T12:06:30.742Z",
+          "mode": "soft",
+          "reason_class": "validation",
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "problem:protocol",
+            "action:optimize",
+            "area:prompt",
+            "area:skills",
+            "risk:validation"
+          ]
+        }
+      ],
+      "epigenetic_marks": [
+        {
+          "context": "darwin/arm64/v25.8.2",
+          "boost": -0.2,
+          "reason": "suppressed_by_failure",
+          "created_at": "2026-04-10T12:06:30.742Z"
+        }
+      ],
+      "schema_version": "1.6.0",
+      "asset_id": "sha256:2354a552e0a84283a632c6752963ba650d60449e3ee70dfbc72c60ffa47a49f8"
     }
   ]
 }
-
