@@ -32,7 +32,43 @@
       "validation": [
         "node scripts/validate-modules.js ./src/evolve ./src/gep/solidify ./src/gep/policyCheck ./src/gep/selector ./src/gep/memoryGraph ./src/gep/assetStore",
         "node scripts/validate-suite.js"
-      ]
+      ],
+      "learning_history": [
+        {
+          "at": "2026-04-10T13:06:25.092Z",
+          "outcome": "failed",
+          "mode": "soft",
+          "reason_class": "validation",
+          "retryable": true,
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "risk:validation"
+          ]
+        }
+      ],
+      "anti_patterns": [
+        {
+          "at": "2026-04-10T13:06:25.092Z",
+          "mode": "soft",
+          "reason_class": "validation",
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "risk:validation"
+          ]
+        }
+      ],
+      "epigenetic_marks": [
+        {
+          "context": "darwin/arm64/v25.8.2",
+          "boost": -0.1,
+          "reason": "failure_in_environment",
+          "created_at": "2026-04-10T13:06:25.092Z"
+        }
+      ],
+      "schema_version": "1.6.0",
+      "asset_id": "sha256:47742c1f40e6672a87817ca0e9a51a62827b562a20b8c19b4a0ae9011f785b8f"
     },
     {
       "type": "Gene",
