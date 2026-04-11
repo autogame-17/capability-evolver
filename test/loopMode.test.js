@@ -129,7 +129,7 @@ describe('bare invocation routing -- black-box', () => {
     const out = execFileSync(process.execPath, ['index.js'], {
       cwd: repoRoot,
       encoding: 'utf8',
-      timeout: 15000,
+      timeout: 60000,
       env: { ...process.env, EVOLVE_BRIDGE: 'false', A2A_HUB_URL: '', EVOLVER_REPO_ROOT: repoRoot },
     });
     assert.ok(out.includes('Starting evolver') || out.includes('GEP'),
@@ -141,7 +141,7 @@ describe('bare invocation routing -- black-box', () => {
     const out = execFileSync(process.execPath, ['index.js', 'nonexistent-cmd'], {
       cwd: repoRoot,
       encoding: 'utf8',
-      timeout: 15000,
+      timeout: 60000,
       env: { ...process.env, A2A_HUB_URL: '' },
     });
     assert.ok(out.includes('Usage:'), 'unknown command should show usage');

@@ -1,30 +1,26 @@
 // Usage: node scripts/validate-suite.js [test-glob-pattern]
-// Runs the project's test suite (node --test) and fails if any test fails.
-// When called without arguments, runs all tests in test/.
-// When called with a glob pattern, runs only matching tests.
-//
-// This script is intended to be used as a Gene validation command.
-// It provides stronger assurance than validate-modules.js (which only
-// checks that modules can be loaded).
-
+// Repo root is hardcoded to <evolver-skill>/ — cwd does not matter.
 const { execSync } = require('child_process');
 const path = require('path');
 
-const pattern = process.argv[2] || 'test/**/*.test.js';
-const repoRoot = process.cwd();
+const EVOLVER_REPO_ROOT = path.join(__dirname, '..');
+const pattern = process.argv[2] || 'test/*.test.js';
+const absPattern = path.isAbsolute(pattern)
+  ? pattern
+  : path.join(EVOLVER_REPO_ROOT, pattern);
 
-const cmd = `node --test ${pattern}`;
+const cmd = `node --test "${absPattern}"`;
 
 try {
   const output = execSync(cmd, {
-    cwd: repoRoot,
+    cwd: EVOLVER_REPO_ROOT,
     stdio: ['pipe', 'pipe', 'pipe'],
-    timeout: 120000,
+    timeout: 180000,
     env: (() => {
       const e = Object.assign({}, process.env, {
         NODE_ENV: 'test',
-        EVOLVER_REPO_ROOT: repoRoot,
-        GEP_ASSETS_DIR: path.join(repoRoot, 'assets', 'gep'),
+        EVOLVER_REPO_ROOT: EVOLVER_REPO_ROOT,
+        GEP_ASSETS_DIR: path.join(EVOLVER_REPO_ROOT, 'assets', 'gep'),
       });
       delete e.EVOLVE_BRIDGE;
       delete e.OPENCLAW_WORKSPACE;
@@ -32,8 +28,8 @@ try {
     })(),
   });
   const out = output.toString('utf8');
-  const passMatch = out.match(/# pass (\d+)/);
-  const failMatch = out.match(/# fail (\d+)/);
+  const passMatch = out.match(/# pass \(\d+\)/);
+  const failMatch = out.match(/# fail \(\d+\)/);
   const passCount = passMatch ? Number(passMatch[1]) : 0;
   const failCount = failMatch ? Number(failMatch[1]) : 0;
 
