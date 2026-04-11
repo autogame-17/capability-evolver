@@ -45,6 +45,109 @@
             "action:repair",
             "risk:validation"
           ]
+        },
+        {
+          "at": "2026-04-11T10:59:46.312Z",
+          "outcome": "success",
+          "mode": "none",
+          "reason_class": "unknown",
+          "retryable": false,
+          "learning_signals": [
+            "repeated_tool_usage:exec",
+            "tool_bypass",
+            "retry_error_context",
+            "retry_cmd:node scripts/validate-suite.js",
+            "retry_stderr:FAIL: test suite exited with code 1\nlogs...\\n', \"[Evolve] Failed to write state file: ENOENT: no such file or directory,"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:07:46.869Z",
+          "outcome": "failed",
+          "mode": "soft",
+          "reason_class": "validation",
+          "retryable": true,
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:08:43.562Z",
+          "outcome": "failed",
+          "mode": "soft",
+          "reason_class": "validation",
+          "retryable": true,
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "area:skills",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:19:52.681Z",
+          "outcome": "failed",
+          "mode": "soft",
+          "reason_class": "validation",
+          "retryable": true,
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:25:46.849Z",
+          "outcome": "failed",
+          "mode": "soft",
+          "reason_class": "validation",
+          "retryable": true,
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:32:52.241Z",
+          "outcome": "failed",
+          "mode": "soft",
+          "reason_class": "validation",
+          "retryable": true,
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "area:skills",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:40:20.773Z",
+          "outcome": "failed",
+          "mode": "soft",
+          "reason_class": "validation",
+          "retryable": true,
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "area:skills",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:46:56.869Z",
+          "outcome": "success",
+          "mode": "none",
+          "reason_class": "unknown",
+          "retryable": false,
+          "learning_signals": [
+            "repeated_tool_usage:exec",
+            "tool_bypass",
+            "retry_error_context",
+            "retry_cmd:node scripts/validate-suite.js",
+            "retry_stderr:FAIL: test suite exited with code 1\nlogs...\\n', \"[Evolve] Failed to write state file: ENOENT: no such file or directory,"
+          ]
         }
       ],
       "anti_patterns": [
@@ -57,14 +160,77 @@
             "action:repair",
             "risk:validation"
           ]
+        },
+        {
+          "at": "2026-04-11T11:07:46.869Z",
+          "mode": "soft",
+          "reason_class": "validation",
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:08:43.562Z",
+          "mode": "soft",
+          "reason_class": "validation",
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "area:skills",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:19:52.681Z",
+          "mode": "soft",
+          "reason_class": "validation",
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:25:46.849Z",
+          "mode": "soft",
+          "reason_class": "validation",
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:32:52.241Z",
+          "mode": "soft",
+          "reason_class": "validation",
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "area:skills",
+            "risk:validation"
+          ]
+        },
+        {
+          "at": "2026-04-11T11:40:20.773Z",
+          "mode": "soft",
+          "reason_class": "validation",
+          "learning_signals": [
+            "problem:reliability",
+            "action:repair",
+            "area:skills",
+            "risk:validation"
+          ]
         }
       ],
       "epigenetic_marks": [
         {
           "context": "darwin/arm64/v25.8.2",
-          "boost": -0.1,
-          "reason": "failure_in_environment",
-          "created_at": "2026-04-10T13:06:25.092Z"
+          "boost": -0.45,
+          "reason": "reinforced_by_success",
+          "created_at": "2026-04-11T11:46:56.869Z"
         }
       ],
       "schema_version": "1.6.0",
@@ -217,6 +383,50 @@
       ],
       "schema_version": "1.6.0",
       "asset_id": "sha256:2354a552e0a84283a632c6752963ba650d60449e3ee70dfbc72c60ffa47a49f8"
+    },
+    {
+      "type": "Gene",
+      "id": "gene_distilled_repair-distilled-repeated-tool-usage-exec-retry",
+      "summary": "Prevents repeated failure: validation_failed",
+      "category": "repair",
+      "signals_match": [
+        "repeated_tool_usage:exec",
+        "retry_error_context",
+        "retry_cmd:node scripts/validate-suite.js",
+        "retry_stderr:fail: test suite exited with code 1\nlogs...\\n', \"[evolve] failed to write state file: enoent: no such file or directory,",
+        "problem:reliability",
+        "action:repair",
+        "risk:validation"
+      ],
+      "preconditions": [
+        "Repeated failure pattern detected in recent capsules (8 occurrences)"
+      ],
+      "strategy": [
+        "GUARD: Check preconditions before making changes -- verify blast radius estimate is within limits.",
+        "GUARD: Validate that target files are not in forbidden_paths before editing.",
+        "APPLY: Make the smallest possible change to address the signal, favoring single-file patches.",
+        "VERIFY: Run validation commands immediately after the change.",
+        "ROLLBACK: If validation fails, revert all changes before proceeding."
+      ],
+      "constraints": {
+        "max_files": 8,
+        "forbidden_paths": [
+          ".git",
+          "node_modules"
+        ]
+      },
+      "validation": [
+        "node --test"
+      ],
+      "schema_version": "1.6.0",
+      "_distilled_meta": {
+        "distilled_at": "2026-04-11T11:46:56.876Z",
+        "source_failure_count": 9,
+        "data_hash": "8cacf5e8ad212746",
+        "auto_distilled": true,
+        "source": "failure_distillation"
+      },
+      "asset_id": "sha256:0401d6088fa28f0c213575c8273f3d7dcc15264e7ccb0af651ba500939467b97"
     }
   ]
 }

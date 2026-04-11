@@ -96,6 +96,62 @@
       },
       "success_streak": 1,
       "asset_id": "sha256:4a2f205213e3c019f7c8e99faf4cfdd65f900f0e8771684002207ee01e96cfa7"
+    },
+    {
+      "type": "Capsule",
+      "schema_version": "1.6.0",
+      "id": "capsule_1775908016841",
+      "trigger": [
+        "repeated_tool_usage:exec",
+        "tool_bypass",
+        "retry_error_context",
+        "retry_cmd:node scripts/validate-suite.js",
+        "retry_stderr:FAIL: test suite exited with code 1\nlogs...\\n', \"[Evolve] Failed to write state file: ENOENT: no such file or directory,"
+      ],
+      "gene": "gene_gep_repair_from_errors",
+      "summary": "固化：gene_gep_repair_from_errors 命中信号 repeated_tool_usage:exec, tool_bypass, retry_error_context, retry_cmd:node scripts/validate-suite.js, retry_stderr:FAIL: test suite exited with code 1\nlogs...\\n', \"[Evolve] Failed to write state file: ENOENT: no such file or directory,，变更 0 文件 / 0 行。",
+      "confidence": 0.87,
+      "blast_radius": {
+        "files": 0,
+        "lines": 0
+      },
+      "outcome": {
+        "status": "success",
+        "score": 0.87
+      },
+      "success_streak": 1,
+      "success_reason": "Gene gene_gep_repair_from_errors (repair) matched signals [repeated_tool_usage:exec, tool_bypass, retry_error_context, retry_cmd:node scripts/validate-suite.js]. Scope: 0 file(s), 0 line(s) changed. Outcome score: 0.87. Strategy applied: Extract structured signals from logs and user instructions; Select an existing Gene by signals match (no improvisation); Estimate blast radius (files, lines) before editing.",
+      "gene_library_version": "glib_5421a667f9417752",
+      "env_fingerprint": {
+        "device_id": "b50b554e299f2c0ab26739e5e4d27022",
+        "node_version": "v25.8.2",
+        "platform": "darwin",
+        "arch": "arm64",
+        "os_release": "25.4.0",
+        "hostname": "8289259ae267",
+        "evolver_version": "1.52.0",
+        "client": "@evomap/evolver",
+        "client_version": "1.52.0",
+        "cwd": "25cc42f44934",
+        "container": false,
+        "captured_at": "2026-04-11T11:45:52.444Z"
+      },
+      "source_type": "generated",
+      "reused_asset_id": null,
+      "a2a": {
+        "eligible_to_broadcast": false
+      },
+      "content": "Gene: gene_gep_repair_from_errors (repair)\n\nSignals: repeated_tool_usage:exec, tool_bypass, retry_error_context, retry_cmd:node scripts/validate-suite.js, retry_stderr:FAIL: test suite exited with code 1\nlogs...\\n', \"[Evolve] Failed to write state file: ENOENT: no such file or directory,\n\nStrategy:\n1. Extract structured signals from logs and user instructions\n2. Select an existing Gene by signals match (no improvisation)\n3. Estimate blast radius (files, lines) before editing\n4. Apply smallest reversible patch\n5. Validate using declared validation steps; rollback on failure\n6. Solidify knowledge: append EvolutionEvent, update Gene/Capsule store\n\nScope: 0 file(s), 0 line(s)\n\nOutcome score: 0.87",
+      "diff": "diff --git a/assets/gep/events.jsonl b/assets/gep/events.jsonl\nindex 927d4ac..6dc9a44 100644\n--- a/assets/gep/events.jsonl\n+++ b/assets/gep/events.jsonl\n@@ -9,3 +9,5 @@\n {\"type\":\"EvolutionEvent\",\"schema_version\":\"1.6.0\",\"id\":\"evt_1775822790679\",\"parent\":\"evt_1775822532812\",\"intent\":\"innovate\",\"signals\":[\"user_improvement_suggestion\",\"user_improvement_suggestion:**ASSISTANT**: pending 目录是空的，直接写入会话提取文件： **C 结果**： tmp 文件已清理 ✅ 现在写今日架构重构的 session extraction 到知识库 inbox： - 临时文件已清理（6MB SQLite write 中断遗留） - 正在写入 session extraction → knowle\",\"high_tool_usage:exec\",\"repeated_tool_usage:exec\",\"retry_error_context\",\"retry_cmd:node scripts/validate-suite.js\",\"retry_stderr:FAIL: test suite exited with code 1\\nace/skills/capability-evolver/test/a2aProtocol.test.js:119:17)\\n      at Test.runInAs\"],\"genes_used\":[\"gene_gep_innovate_from_opportunity\"],\"mutation_id\":\"mut_1775822728776\",\"personality_state\":{\"type\":\"PersonalityState\",\"rigor\":0.7,\"creativity\":0.35,\"verbosity\":0.25,\"risk_tolerance\":0.4,\"obedience\":0.85},\"blast_radius\":{\"files\":0,\"lines\":0},\"outcome\":{\"status\":\"failed\",\"score\":0.75},\"capsule_id\":null,\"source_type\":\"generated\",\"reused_asset_id\":null,\"gene_library_version\":\"glib_2f89b2990ff103e3\",\"env_fingerprint\":{\"device_id\":\"b50b554e299f2c0ab26739e5e4d27022\",\"node_version\":\"v25.8.2\",\"platform\":\"darwin\",\"arch\":\"arm64\",\"os_release\":\"25.3.0\",\"hostname\":\"8289259ae267\",\"evolver_version\":\"1.48.0\",\"client\":\"@evomap/evolver\",\"client_version\":\"1.48.0\",\"cwd\":\"82d6225a02cf\",\"container\":false,\"captured_at\":\"2026-04-10T12:05:42.008Z\"},\"validation_report_id\":\"vr_1775822790679\",\"meta\":{\"at\":\"2026-04-10T12:06:30.679Z\",\"signal_key\":\"high_tool_usage:exec|repeated_tool_usage:exec|retry_cmd:node scripts/validate-suite.js|retry_error_context|retry_stderr:FAIL: test suite exited with code 1\\nace/skills/capability-evolver/test/a2aProtocol.test.js:119:17)\\n      at Test.runInAs|user_improvement_suggestion|user_improvement_suggestion:**ASSISTANT**: pending 目录是空的，直接写入会话提取文件： **C 结果**： tmp 文件已清理 ✅ 现在写今日架构重构的 session extraction 到知识库 inbox： - 临时文件已清理（6MB SQLite write 中断遗留） - 正在写入 session extraction → knowle\",\"selector\":{\"selected\":\"gene_gep_innovate_from_opportunity\",\"reason\":[\"signals match gene.signals_match\",\"capsule trigger matches signals\",\"signals: user_improvement_suggestion, user_improvement_suggestion:**ASSISTANT**: pending 目录是空的，直接写入会话提取文件： **C 结果**： tmp 文件已清理 ✅ 现在写今日架构重构的 session extraction 到知识库 inbox： - 临时文件已清理（6MB SQLite write 中断遗留） - 正在写入 session extraction → knowle, high_tool_usage:exec, repeated_tool_usage:exec, retry_error_context, retry_cmd:node scripts/validate-suite.js, retry_stderr:FAIL: test suite exited with code 1\\nace/skills/capability-evolver/test/a2aProtocol.test.js:119:17)\\n      at Test.runInAs\",\"memory_graph: memory_prefer:gene_gep_innovate_from_opportunity | gene_prior:0.667\",\"drift_intensity: 0.577\"],\"alternatives\":[\"gene_gep_repair_from_errors\",\"gene_gep_optimize_prompt_and_assets\"]},\"blast_radius_estimate\":{\"files\":25,\"lines\":2000},\"mutation\":{\"type\":\"Mutation\",\"id\":\"mut_1775822728776\",\"category\":\"innovate\",\"trigger_signals\":[\"user_improvement_suggestion\",\"user_improvement_suggestion:**ASSISTANT**: pending 目录是空的，直接写入会话提取文件： **C 结果**： tmp 文件已清理 ✅ 现在写今日架构重构的 session extraction 到知识库 inbox： - 临时文件已清理（6MB SQLite write 中断遗留） - 正在写入 session extraction → knowle\",\"high_tool_usage:exec\",\"repeated_tool_usage:exec\",\"retry_error_context\",\"retry_cmd:node scripts/validate-suite.js\",\"retry_stderr:FAIL: test suite exited with code 1\\nace/skills/capability-evolver/test/a2aProtocol.test.js:119:17)\\n      at Test.runInAs\"],\"target\":\"gene:gene_gep_innovate_from_opportunity\",\"expected_effect\":\"explore new strategy combinations to escape local optimum\",\"risk_level\":\"medium\"},\"personality\":{\"key\":\"rigor=0.7|creativity=0.3|verbosity=0.3|risk_tolerance=0.4|obedience=0.9\",\"known\":true,\"mutations\":[]},\"gene\":{\"id\":\"gene_gep_innovate_from_opportunity\",\"created\":false,\"reason\":\"selected_gene_id_present\"},\"constraints_ok\":true,\"constraint_violations\":[],\"constraint_warnings\":[null],\"blast_severity\":\"within_limit\",\"blast_breakdown\":null,\"blast_estimate_comparison\":{\"estimateFiles\":25,\"actualFiles\":0,\"ratio\":0,\"drifted\":true,\"message\":null},\"validation_ok\":false,\"validation\":[{\"cmd\":\"node scripts/validate-modules.js ./src/evolve ./src/gep/solidify ./src/gep/policyCheck ./src/gep/mutation ./src/gep/personality\",\"ok\":true},{\"cmd\":\"node scripts/validate-suite.js\",\"ok\":false}],\"validation_report\":{\"type\":\"ValidationReport\",\"schema_version\":\"1.6.0\",\"id\":\"vr_1775822790679\",\"gene_id\":\"gene_gep_innovate_from_opportunity\",\"env_fingerprint\":{\"device_id\":\"b50b554e299f2c0ab26739e5e4d27022\",\"node_version\":\"v25.8.2\",\"platform\":\"darwin\",\"arch\":\"arm64\",\"os_release\":\"25.3.0\",\"hostname\":\"8289259ae267\",\"evolver_version\":\"1.48.0\",\"client\":\"@evomap/evolver\",\"client_version\":\"1.48.0\",\"cwd\":\"82d6225a02cf\",\"container\":false,\"captured_at\":\"2026-04-10T12:05:42.008Z\"},\"env_fingerprint_key\":\"e1531c5c7cee860b\",\"commands\":[{\"command\":\"node scripts/validate-modules.js ./src/evolve ./src/gep/solidify ./src/gep/policyCheck ./src/gep/mutation ./src/gep/personality\",\"ok\":true,\"stdout\":\"ok: 5 module(s) validated\\n\",\"stderr\":\"\"},{\"command\":\"node scripts/validate-suite.js\",\"ok\":false,\"stdout\":\"\",\"stderr\":\"FAIL: test suite exited with code 1\\nlogs...\\\\n', \\\"[Evolve] Failed to write state file: ENOENT: no such file or directory, open '/var/folders/h_/76vl3zj94_d468_ntcxv6jqw0000gn/T/evolver-loop-test-ARCd5X/memory/evolution/evolution_state.json'\\\\n\\\" ],\\n    pid: 69185,\\n    stdout: 'Starting evolver...\\\\nScanning session logs...\\\\n',\\n    stderr: \\\"[Evolve] Failed to write state file: ENOENT: no such file or directory, open '/var/folders/h_/76vl3zj94_d468_ntcxv6jqw0000gn/T/evolver-loop-test-ARCd5X/memory/evolution/evolution_state.json'\\\\n\\\"\\n  }\\n\\n\"}],\"overall_ok\":false,\"duration_ms\":15514,\"created_at\":\"2026-04-10T12:06:30.679Z\",\"asset_id\":\"sha256:45e87d0492355cbf6f337fb72965f2363effa11f41cac2a1920f4f87ddf16c4d\"},\"canary_ok\":true,\"canary_skipped\":false,\"protocol_ok\":true,\"protocol_violations\":[],\"memory_graph\":\"/Users/dengyunye/.openclaw/workspace/skills/capability-evolver/memory/evolution/memory_graph.jsonl\",\"soft_failure\":{\"learning_signals\":[\"problem:reliability\",\"action:repair\",\"problem:protocol\",\"action:optimize\",\"area:prompt\",\"area:skills\",\"risk:validation\"],\"retryable\":true,\"class\":\"validation\",\"mode\":\"soft\"},\"process_scores\":{\"signal_quality\":1,\"gene_selection\":0.9,\"mutation_quality\":0.5,\"blast_control\":0.4,\"constraint_compliance\":1,\"validation_pass_rate\":0.5,\"protocol_compliance\":1,\"canary_health\":1,\"composite\":0.75,\"weights\":{\"signal\":0.05,\"selection\":0.1,\"mutation\":0.05,\"blast\":0.15,\"constraint\":0.25,\"validation\":0.25,\"protocol\":0.1,\"canary\":0.05}}},\"execution_trace\":{\"gene_id\":\"gene_gep_innovate_from_opportunity\",\"mutation_category\":\"innovate\",\"signals_matched\":[\"user_improvement_suggestion\",\"user_improvement_suggestion:**ASSISTANT**: pending 目录是空的，直接写入会话提取文件： **C 结果**： tmp 文件已清理 ✅ 现在写今日架构重构的 session extraction 到知识库 inbox： - 临时文件已清理（6MB SQLite write 中断遗留） - 正在写入 session extraction → knowle\",\"high_tool_usage:exec\",\"repeated_tool_usage:exec\",\"retry_error_context\",\"retry_cmd:node scripts/validate-suite.js\",\"retry_stderr:FAIL: test suite exited with code 1\\nace/skills/capability-evolver/test/a2aProtocol.test.js:119:17)\\n      at Test.runInAs\"],\"outcome\":\"failed\",\"files_changed_count\":0,\"lines_added\":0,\"lines_removed\":0,\"validation_result\":\"fail\",\"blast_radius\":\"low\",\"created_at\":\"2026-04-10T12:06:30.680Z\"},\"asset_id\":\"sha256:df6544b11eb9af16c6441b7b385bd18506ca7fbddb4d4f169714a543be296117\"}\n {\"type\":\"ValidationReport\",\"schema_version\":\"1.6.0\",\"id\":\"vr_1775826385031\",\"gene_id\":\"gene_gep_repair_from_errors\",\"env_fingerprint\":{\"device_id\":\"b50b554e299f2c0ab26739e5e4d27022\",\"node_version\":\"v25.8.2\",\"platform\":\"darwin\",\"arch\":\"arm64\",\"os_release\":\"25.3.0\",\"hostname\":\"8289259ae267\",\"evolver_version\":\"1.48.0\",\"client\":\"@evomap/evolver\",\"client_version\":\"1.48.0\",\"cwd\":\"82d6225a02cf\",\"container\":false,\"captured_at\":\"2026-\n... [TRUNCATED]",
+      "strategy": [
+        "Extract structured signals from logs and user instructions",
+        "Select an existing Gene by signals match (no improvisation)",
+        "Estimate blast radius (files, lines) before editing",
+        "Apply smallest reversible patch",
+        "Validate using declared validation steps; rollback on failure",
+        "Solidify knowledge: append EvolutionEvent, update Gene/Capsule store"
+      ],
+      "asset_id": "sha256:f1dcd0b28dc7b63fe3890e149eb14b4679fedc2225535e7ad8da88eaabb664c0"
     }
   ]
 }
