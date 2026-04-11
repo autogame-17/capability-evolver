@@ -132,14 +132,25 @@
             "evolution_stagnation_detected",
             "stable_success_plateau"
           ]
+        },
+        {
+          "at": "2026-04-11T07:32:29.723Z",
+          "outcome": "success",
+          "mode": "none",
+          "reason_class": "unknown",
+          "retryable": false,
+          "learning_signals": [
+            "evolution_stagnation_detected",
+            "stable_success_plateau"
+          ]
         }
       ],
       "epigenetic_marks": [
         {
           "context": "linux/x64/v22.22.1",
-          "boost": 0.2,
+          "boost": 0.25,
           "reason": "reinforced_by_success",
-          "created_at": "2026-04-11T07:29:56.333Z"
+          "created_at": "2026-04-11T07:32:29.724Z"
         }
       ],
       "schema_version": "1.6.0",
