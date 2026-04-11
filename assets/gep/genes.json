@@ -176,14 +176,27 @@
             "protocol_drift",
             "tool_bypass"
           ]
+        },
+        {
+          "at": "2026-04-11T12:51:12.558Z",
+          "outcome": "success",
+          "mode": "none",
+          "reason_class": "unknown",
+          "retryable": false,
+          "learning_signals": [
+            "evolution_stagnation_detected",
+            "stable_success_plateau",
+            "empty_cycle_loop_detected",
+            "evolution_saturation"
+          ]
         }
       ],
       "epigenetic_marks": [
         {
           "context": "linux/x64/v22.22.1",
-          "boost": 0.39999999999999997,
+          "boost": 0.44999999999999996,
           "reason": "reinforced_by_success",
-          "created_at": "2026-04-11T07:59:48.729Z"
+          "created_at": "2026-04-11T12:51:12.558Z"
         }
       ],
       "schema_version": "1.6.0",
@@ -326,14 +339,26 @@
             "evolution_stagnation_detected",
             "stable_success_plateau"
           ]
+        },
+        {
+          "at": "2026-04-11T12:38:21.295Z",
+          "outcome": "success",
+          "mode": "none",
+          "reason_class": "unknown",
+          "retryable": false,
+          "learning_signals": [
+            "evolution_stagnation_detected",
+            "stable_success_plateau",
+            "evolution_saturation"
+          ]
         }
       ],
       "epigenetic_marks": [
         {
           "context": "linux/x64/v22.22.1",
-          "boost": 0.44999999999999996,
+          "boost": 0.49999999999999994,
           "reason": "reinforced_by_success",
-          "created_at": "2026-04-11T11:57:39.238Z"
+          "created_at": "2026-04-11T12:38:21.295Z"
         }
       ],
       "schema_version": "1.6.0",
