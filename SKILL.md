@@ -336,6 +336,8 @@ node index.js --review
 | `EVOLVE_STRATEGY` | `balanced` | Evolution strategy |
 | `EVOLVER_ROLLBACK_MODE` | `hard` | Rollback on failure: hard, stash, none |
 | `EVOLVER_LLM_REVIEW` | `0` | Enable LLM review before solidification |
+| `MINIMAX_API_KEY` | (none) | MiniMax API key for LLM-powered review (uses MiniMax-M2.7 via `api.minimax.io`) |
+| `MINIMAX_BASE_URL` | `https://api.minimax.io/v1` | Override MiniMax API base URL |
 | `GITHUB_TOKEN` | (none) | GitHub API token |
 
 ---
