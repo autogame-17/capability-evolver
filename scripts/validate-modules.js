@@ -21,17 +21,12 @@ for (const m of modules) {
     process.exit(1);
   }
 
-  if (t === 'object') {
-    const keys = Object.keys(exported);
-    for (const k of keys) {
-      if (typeof exported[k] === 'function') {
-        if (typeof exported[k] !== 'function') {
-          console.error('FAIL: ' + m + '.' + k + ' is declared but not a callable function');
-          process.exit(1);
-        }
-      }
-    }
-  }
+  // Previously this block contained a nested `typeof === 'function'` test
+  // inside `typeof === 'function'`, which was trivially false and made the
+  // intended "declared but not callable" warning unreachable. Without a
+  // declaration manifest we cannot tell which exported keys are expected
+  // to be functions, so the block is left as a no-op but the dead branch
+  // is removed to avoid giving false assurance.
   checked++;
 }
 
