@@ -12,29 +12,100 @@ function analyzeEvolution() {
     }
 
     const content = fs.readFileSync(LOG_FILE, 'utf8');
-    // Split by divider
-    const entries = content.split('---').map(e => e.trim()).filter(e => e.length > 0);
 
-    const skillUpdates = {}; // Map<SkillName, Array<Changes>>
-    const generalUpdates = []; // Array<Changes>
+    // Split entries
+    const entries = content
+        .split('---')
+        .map(e => e.trim())
+        .filter(e => e.length > 0);
 
-    // Regex to detect skills/paths
-    // e.g. `skills/feishu-card/send.js` or **Target**: `skills/git-sync`
+    const skillUpdates = {};
+    const generalUpdates = [];
+    const changeTypeStats = {};
+
+    // Regex
     const skillRegex = /skills\/([a-zA-Z0-9\-_]+)/;
-    const actionRegex = /Action:\s*([\s\S]*?)(?=\n\n|\n[A-Z]|$)/i; // Capture Action text
+    const actionRegex = /Action:\s*([\s\S]*?)(?=\n\n|\n[A-Z]|$)/i;
     const statusRegex = /Status:\s*\[?([A-Z\s_]+)\]?/i;
 
+    function detectChangeType(text) {
+        if (/fix(ed)?/i.test(text)) return 'Fix';
+        if (/add(ed)?|feature/i.test(text)) return 'Feature';
+        if (/refactor(ed)?/i.test(text)) return 'Refactor';
+        if (/optimi[sz]e(d)?/i.test(text)) return 'Optimize';
+        if (/remove(d)?/i.test(text)) return 'Remove';
+        return 'Other';
+    }
+
     entries.forEach(entry => {
-        // Extract basic info
         const statusMatch = entry.match(statusRegex);
         const status = statusMatch ? statusMatch[1].trim().toUpperCase() : 'UNKNOWN';
-        
-        // Skip routine checks if we want a *detailed evolution* report (focus on changes)
-        // But user asked for "what happened", so routine scans might be boring unless they found something.
-        // Let's filter out "STABILITY" or "RUNNING" unless there is a clear "Mutated" or "Fixed" keyword.
-        const isInteresting = 
-            entry.includes('Fixed') || 
-            entry.includes('Hardened') || 
+
+        const actionMatch = entry.match(actionRegex);
+        const actionText = actionMatch ? actionMatch[1].trim() : '';
+
+        const skillMatch = entry.match(skillRegex);
+        const skill = skillMatch ? skillMatch[1] : null;
+
+        const changeType = detectChangeType(actionText);
+
+        // Count change types
+        changeTypeStats[changeType] = (changeTypeStats[changeType] || 0) + 1;
+
+        const updateObj = {
+            status,
+            action: actionText,
+            type: changeType
+        };
+
+        if (skill) {
+            if (!skillUpdates[skill]) skillUpdates[skill] = [];
+            skillUpdates[skill].push(updateObj);
+        } else {
+            generalUpdates.push(updateObj);
+        }
+    });
+
+    // Build report
+    let report = `# Evolution Detailed Report\n\n`;
+
+    // Most active skills
+    report += `## 🔝 Most Active Skills\n`;
+    const sortedSkills = Object.entries(skillUpdates)
+        .sort((a, b) => b[1].length - a[1].length);
+
+    sortedSkills.forEach(([skill, updates]) => {
+        report += `- ${skill}: ${updates.length} changes\n`;
+    });
+
+    // Change type distribution
+    report += `\n## 📊 Change Type Distribution\n`;
+    Object.entries(changeTypeStats).forEach(([type, count]) => {
+        report += `- ${type}: ${count}\n`;
+    });
+
+    // Detailed skill evolution
+    report += `\n## 🧠 Skill-wise Evolution\n`;
+    sortedSkills.forEach(([skill, updates]) => {
+        report += `\n### ${skill}\n`;
+        updates.forEach(u => {
+            report += `- [${u.type}] (${u.status}) ${u.action}\n`;
+        });
+    });
+
+    // General updates
+    if (generalUpdates.length > 0) {
+        report += `\n## 🌐 General Updates\n`;
+        generalUpdates.forEach(u => {
+            report += `- [${u.type}] (${u.status}) ${u.action}\n`;
+        });
+    }
+
+    fs.writeFileSync(OUT_FILE, report, 'utf8');
+    console.log("Detailed evolution report generated.");
+}
+
+analyzeEvolution();            entry.includes('Hardened') || 
             entry.includes('Optimized') || 
             entry.includes('Patched') || 
             entry.includes('Created') || 
