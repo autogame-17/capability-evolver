@@ -34,9 +34,7 @@ function getRunningPids() {
             var cmd = parts.slice(1).join(' ');
             if (pid === process.pid) continue;
             if (cmd.includes('node') && cmd.includes('index.js') && cmd.includes('--loop')) {
-                if (cmd.includes('feishu-evolver-wrapper') || cmd.includes('skills/evolver')) {
-                    pids.push(pid);
-                }
+                pids.push(pid);
             }
         }
         return [...new Set(pids)].filter(isPidRunning);
