@@ -98,6 +98,60 @@ function getSkillsDir() {
   return process.env.SKILLS_DIR || path.join(getWorkspaceRoot(), 'skills');
 }
 
+// Resolve the OpenClaw `sessions` directory for the agent that actually
+// matches the current EVOLVER_SESSION_SCOPE (fixes #371).
+//
+// Precedence:
+//   1. AGENT_SESSIONS_DIR         explicit override
+//   2. EVOLVER_SESSION_SCOPE with a `workspace-<agent>` prefix =>
+//      ~/.openclaw/agents/<agent>/sessions
+//   3. AGENT_NAME (defaults to "main")   pre-#371 behavior
+function getAgentSessionsDir() {
+  if (process.env.AGENT_SESSIONS_DIR) return process.env.AGENT_SESSIONS_DIR;
+
+  const scope = getSessionScope();
+  let agentName = null;
+  if (scope) {
+    const match = /^workspace-(.+)$/.exec(scope);
+    if (match) agentName = match[1];
+  }
+  if (!agentName) agentName = process.env.AGENT_NAME || 'main';
+
+  const home = process.env.HOME || process.env.USERPROFILE || '';
+  return path.join(home, '.openclaw', 'agents', agentName, 'sessions');
+}
+
+// Read the first `maxBytes` of a session .jsonl file and extract the `cwd`
+// field from its header record (fixes #371, bug 2).
+//
+// OpenClaw session files are newline-delimited JSON. The first record is a
+// session header that carries workspace context including `cwd`. The
+// pre-#371 matcher tailed the file, which never saw the header. This
+// reader is O(1) on file size. Returns null on any read/parse failure.
+function readSessionCwdFromHead(sessionFilePath, maxBytes) {
+  const cap = typeof maxBytes === 'number' && maxBytes > 0 ? maxBytes : 800;
+  try {
+    if (!fs.existsSync(sessionFilePath)) return null;
+    const fd = fs.openSync(sessionFilePath, 'r');
+    try {
+      const stat = fs.fstatSync(fd);
+      const readSize = Math.min(cap, stat.size);
+      if (readSize <= 0) return null;
+      const buf = Buffer.alloc(readSize);
+      fs.readSync(fd, buf, 0, readSize, 0);
+      const newline = buf.indexOf('\n');
+      const slice = newline >= 0 ? buf.slice(0, newline) : buf;
+      const record = JSON.parse(slice.toString('utf8'));
+      if (record && typeof record.cwd === 'string') return record.cwd;
+      return null;
+    } finally {
+      fs.closeSync(fd);
+    }
+  } catch (_err) {
+    return null;
+  }
+}
+
 function getNarrativePath() {
   return path.join(getEvolutionDir(), 'evolution_narrative.md');
 }
@@ -123,6 +177,8 @@ module.exports = {
   getGepAssetsDir,
   getSkillsDir,
   getSessionScope,
+  getAgentSessionsDir,
+  readSessionCwdFromHead,
   getNarrativePath,
   getEvolutionPrinciplesPath,
   getReflectionLogPath,

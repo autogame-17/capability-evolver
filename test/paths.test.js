@@ -260,3 +260,113 @@ describe('getWorkspaceRoot', () => {
     assert.ok(getSkillsDir().startsWith(ws), 'skillsDir should be under workspaceRoot');
   });
 });
+
+describe('getAgentSessionsDir', () => {
+  const savedEnv = {};
+  const envKeys = ['AGENT_SESSIONS_DIR', 'AGENT_NAME', 'EVOLVER_SESSION_SCOPE', 'HOME'];
+
+  beforeEach(() => {
+    for (const k of envKeys) {
+      savedEnv[k] = process.env[k];
+      delete process.env[k];
+    }
+  });
+
+  afterEach(() => {
+    for (const k of envKeys) {
+      if (savedEnv[k] === undefined) delete process.env[k];
+      else process.env[k] = savedEnv[k];
+    }
+  });
+
+  it('respects AGENT_SESSIONS_DIR override', () => {
+    process.env.AGENT_SESSIONS_DIR = '/tmp/override/sessions';
+    const { getAgentSessionsDir } = freshRequire('../src/gep/paths');
+    assert.equal(getAgentSessionsDir(), '/tmp/override/sessions');
+  });
+
+  it('derives agent name from workspace-<name> scope', () => {
+    process.env.HOME = '/tmp/home';
+    process.env.EVOLVER_SESSION_SCOPE = 'workspace-helperclaw';
+    const { getAgentSessionsDir } = freshRequire('../src/gep/paths');
+    assert.equal(
+      getAgentSessionsDir(),
+      path.join('/tmp/home', '.openclaw', 'agents', 'helperclaw', 'sessions'),
+    );
+  });
+
+  it('falls back to AGENT_NAME when scope has no workspace- prefix', () => {
+    process.env.HOME = '/tmp/home';
+    process.env.EVOLVER_SESSION_SCOPE = 'channel-123';
+    process.env.AGENT_NAME = 'custom-agent';
+    const { getAgentSessionsDir } = freshRequire('../src/gep/paths');
+    assert.equal(
+      getAgentSessionsDir(),
+      path.join('/tmp/home', '.openclaw', 'agents', 'custom-agent', 'sessions'),
+    );
+  });
+
+  it('defaults to main agent when neither scope nor AGENT_NAME is set', () => {
+    process.env.HOME = '/tmp/home';
+    const { getAgentSessionsDir } = freshRequire('../src/gep/paths');
+    assert.equal(
+      getAgentSessionsDir(),
+      path.join('/tmp/home', '.openclaw', 'agents', 'main', 'sessions'),
+    );
+  });
+});
+
+describe('readSessionCwdFromHead', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'session-head-'));
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('extracts cwd from the first record', () => {
+    const file = path.join(tmpDir, 'session.jsonl');
+    const header = JSON.stringify({
+      type: 'session_start',
+      cwd: '/Users/test/workspaces/helperclaw',
+      id: 'c982d748',
+    });
+    const body = JSON.stringify({ type: 'user', text: 'hello' });
+    fs.writeFileSync(file, header + '\n' + body + '\n');
+    const { readSessionCwdFromHead } = freshRequire('../src/gep/paths');
+    assert.equal(readSessionCwdFromHead(file), '/Users/test/workspaces/helperclaw');
+  });
+
+  it('returns null when the header has no cwd field', () => {
+    const file = path.join(tmpDir, 'session.jsonl');
+    fs.writeFileSync(file, JSON.stringify({ type: 'session_start' }) + '\n');
+    const { readSessionCwdFromHead } = freshRequire('../src/gep/paths');
+    assert.equal(readSessionCwdFromHead(file), null);
+  });
+
+  it('returns null when the file does not exist', () => {
+    const { readSessionCwdFromHead } = freshRequire('../src/gep/paths');
+    assert.equal(readSessionCwdFromHead(path.join(tmpDir, 'missing.jsonl')), null);
+  });
+
+  it('returns null when the first line is not valid JSON', () => {
+    const file = path.join(tmpDir, 'session.jsonl');
+    fs.writeFileSync(file, 'not-json\n{"type":"user"}\n');
+    const { readSessionCwdFromHead } = freshRequire('../src/gep/paths');
+    assert.equal(readSessionCwdFromHead(file), null);
+  });
+
+  it('caps read size to the configured maxBytes', () => {
+    const file = path.join(tmpDir, 'session.jsonl');
+    const header = JSON.stringify({ type: 'session_start', cwd: '/ok', pad: 'x'.repeat(2048) });
+    fs.writeFileSync(file, header + '\n');
+    const { readSessionCwdFromHead } = freshRequire('../src/gep/paths');
+    // default 800-byte cap means the JSON slice won't parse; helper returns null
+    assert.equal(readSessionCwdFromHead(file), null);
+    // large enough cap recovers cwd
+    assert.equal(readSessionCwdFromHead(file, 4096), '/ok');
+  });
+});
