@@ -60,6 +60,10 @@ function truncateNodeId(nodeId) {
 }
 
 function computeErrorKey(signals) {
+  // Normalize occurrence-specific prefixes so the same underlying error
+  // yields a stable key across re-emissions. Without this, recurring_errsig
+  // carries an (Nx) count that changes every cycle and defeats recentIssueKeys
+  // deduplication.
   const relevant = signals
     .filter(function (s) {
       return s.startsWith('recurring_errsig') ||
@@ -67,6 +71,9 @@ function computeErrorKey(signals) {
         s === 'recurring_error' ||
         s === 'failure_loop_detected' ||
         s === 'high_failure_ratio';
+    })
+    .map(function (s) {
+      return s.replace(/^recurring_errsig\(\d+x\):/, 'recurring_errsig:');
     })
     .sort()
     .join('|');
@@ -177,8 +184,11 @@ function shouldReport(signals, config) {
 
   if (!hasFailureLoop && !hasRecurringAndHigh) return false;
 
+  // Enforce the configured minimum streak. Previously this short-circuited
+  // only when the streak signal was present; if a caller omitted the
+  // consecutive_failure_streak_N signal we'd silently bypass the gate.
   const streakCount = extractStreakCount(signals);
-  if (streakCount > 0 && streakCount < config.minStreak) return false;
+  if (streakCount < config.minStreak) return false;
 
   const state = readState();
   const errorKey = computeErrorKey(signals);
@@ -244,10 +254,15 @@ async function findExistingIssue(repo, title, token) {
   let data;
   try { data = await response.json(); } catch (_) { return null; }
   const items = Array.isArray(data && data.items) ? data.items : [];
+  // Prefer exact-title match; otherwise fall back to strict prefix match
+  // against our own auto-issue title sentinel. The old substring fallback
+  // matched unrelated issues whose body had been edited into the title.
+  const AUTO_PREFIX = '[Auto] Recurring failure: ';
   const match = items.find(function (it) {
     return it && typeof it.title === 'string' && it.title.trim() === title.trim() && it.state === 'open';
   }) || items.find(function (it) {
-    return it && it.state === 'open' && typeof it.title === 'string' && it.title.indexOf(titleSig) !== -1;
+    return it && it.state === 'open' && typeof it.title === 'string' &&
+      it.title.startsWith(AUTO_PREFIX) && it.title.trim().startsWith(titleSig.trim());
   });
   if (!match) return null;
   return { number: match.number, url: match.html_url, title: match.title };
@@ -281,8 +296,12 @@ async function maybeReportIssue(opts) {
       let recentKeys = Array.isArray(state.recentIssueKeys) ? state.recentIssueKeys : [];
       if (!recentKeys.includes(errorKey)) recentKeys.push(errorKey);
       if (recentKeys.length > 20) recentKeys = recentKeys.slice(-20);
+      // Do NOT bump lastReportedAt on the skip branch. We did not file a
+      // new issue, and rewriting the timestamp here would continually
+      // reset the cooldown clock every cycle and suppress future reports
+      // indefinitely while the existing issue stayed open.
       writeState({
-        lastReportedAt: new Date().toISOString(),
+        lastReportedAt: state.lastReportedAt || null,
         recentIssueKeys: recentKeys,
         lastIssueUrl: existing.url,
         lastIssueNumber: existing.number,
@@ -310,4 +329,13 @@ async function maybeReportIssue(opts) {
   }
 }
 
-module.exports = { maybeReportIssue, buildIssueBody, shouldReport, findExistingIssue };
+module.exports = {
+  maybeReportIssue,
+  buildIssueBody,
+  shouldReport,
+  findExistingIssue,
+  // Internals exposed so unit tests can cover dedup, streak, and key stability.
+  computeErrorKey,
+  extractStreakCount,
+  extractErrorSignature,
+};
