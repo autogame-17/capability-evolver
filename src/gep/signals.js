@@ -254,24 +254,29 @@ function _extractLLM(corpus) {
 
     var url = hubUrl + '/a2a/signal/analyze';
 
-    // Use execSync + curl for truly synchronous HTTP. Node's http.request() is
-    // async and its callbacks cannot fire inside a synchronous spin-wait loop
-    // because execSync blocks the event loop.
-    var curlCmd = 'curl -s -m 10 -X POST'
-      + ' -H "Content-Type: application/json"'
-      + ' -H "Authorization: Bearer ' + nodeSecret + '"'
-      + ' -d ' + JSON.stringify(postData).replace(/'/g, "'\\''")
-      + ' ' + JSON.stringify(url);
-
-    var execSync = require('child_process').execSync;
+    // Use spawnSync + curl for truly synchronous HTTP. Node's http.request()
+    // is async and its callbacks cannot fire inside a synchronous spin-wait
+    // loop because a synchronous subprocess blocks the event loop. Argv-array
+    // form avoids shell interpretation, so values in nodeSecret, postData, or
+    // url cannot escape through shell metacharacters.
+    var spawnSync = require('child_process').spawnSync;
     var stdout = '';
     try {
-      stdout = execSync(curlCmd, {
+      var res = spawnSync('curl', [
+        '-s', '-m', '10', '-X', 'POST',
+        '-H', 'Content-Type: application/json',
+        '-H', 'Authorization: Bearer ' + nodeSecret,
+        '-d', postData,
+        url,
+      ], {
         timeout: 12000,
         windowsHide: true,
         stdio: ['pipe', 'pipe', 'pipe'],
         encoding: 'utf8',
+        shell: false,
       });
+      if (res.status !== 0 || res.error) return [];
+      stdout = res.stdout || '';
     } catch (_) {
       return [];
     }

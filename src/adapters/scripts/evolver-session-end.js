@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execSync, spawnSync } = require('child_process');
 
 function findEvolverRoot() {
   const candidates = [
@@ -101,12 +101,16 @@ function recordToHub(outcome) {
       summary: outcome.summary,
       sender_id: nodeId || undefined,
     });
-    const curlCmd = `curl -s -m 8 -X POST`
-      + ` -H "Content-Type: application/json"`
-      + ` -H "Authorization: Bearer ${apiKey}"`
-      + ` -d '${payload.replace(/'/g, "'\\''")}'`
-      + ` "${hubUrl.replace(/\/+$/, '')}/a2a/evolution/record"`;
-    execSync(curlCmd, { timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'] });
+    // Argv-array form avoids shell interpretation of apiKey, payload, or the
+    // hub URL. Values cannot break out through quoting metacharacters.
+    const res = spawnSync('curl', [
+      '-s', '-m', '8', '-X', 'POST',
+      '-H', 'Content-Type: application/json',
+      '-H', `Authorization: Bearer ${apiKey}`,
+      '-d', payload,
+      `${hubUrl.replace(/\/+$/, '')}/a2a/evolution/record`,
+    ], { timeout: 10000, stdio: ['pipe', 'pipe', 'pipe'], shell: false });
+    if (res.status !== 0 || res.error) return false;
     return true;
   } catch {
     return false;
