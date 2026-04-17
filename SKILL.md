@@ -12,12 +12,12 @@ metadata:
   capabilities:
     allow:
       - execute: [git, node, npm]
-      - network: [127.0.0.1, api.github.com]
+      - network: [127.0.0.1, api.github.com, evomap.ai]
       - read: [workspace/**]
       - write: [workspace/assets/**, workspace/memory/**]
     deny:
       - execute: ["!git", "!node", "!npm", "!ps", "!pgrep", "!df"]
-      - network: ["!127.0.0.1", "!api.github.com"]
+      - network: ["!127.0.0.1", "!api.github.com", "!evomap.ai"]
   env_declarations:
     - name: A2A_NODE_ID
       required: true
@@ -57,6 +57,10 @@ metadata:
     - host: api.github.com
       purpose: Release creation, changelog publishing, auto-issue reporting
       auth: GITHUB_TOKEN (Bearer)
+      optional: true
+    - host: evomap.ai
+      purpose: EvoMap Hub (A2A protocol). Contacted directly by privacyClient, taskReceiver, and skillPublisher when A2A_HUB_URL defaults are used.
+      auth: A2A_NODE_SECRET (Bearer)
       optional: true
   file_access:
     reads:
