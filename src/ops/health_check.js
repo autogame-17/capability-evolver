@@ -1,13 +1,20 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execSync } = require('child_process');
+
+function getDefaultMount() {
+    if (process.platform === 'win32') {
+        return path.parse(process.cwd()).root || 'C:\\';
+    }
+    return '/';
+}
 
 function getDiskUsage(mount) {
     try {
+        const targetMount = mount || getDefaultMount();
         // Use Node 18+ statfs if available
         if (fs.statfsSync) {
-            const stats = fs.statfsSync(mount || '/');
+            const stats = fs.statfsSync(targetMount);
             const total = stats.blocks * stats.bsize;
             const free = stats.bavail * stats.bsize; // available to unprivileged users
             const used = total - free;
@@ -16,13 +23,7 @@ function getDiskUsage(mount) {
                 freeMb: Math.round(free / 1024 / 1024)
             };
         }
-        // Fallback
-        const safeMount = String(mount || '/').replace(/["';&|><`$()]/g, '');
-        const out = execSync(`df -P "${safeMount}" | tail -1 | awk '{print $5, $4}'`).toString().trim().split(' ');
-        return {
-            pct: parseInt(out[0].replace(/%/g, ''), 10),
-            freeMb: Math.round(parseInt(out[1], 10) / 1024) // df returns 1k blocks usually
-        };
+        return { pct: -1, freeMb: -1, error: 'statfs unavailable on this Node runtime' };
     } catch (e) {
         return { pct: -1, freeMb: -1, error: e.message };
     }
@@ -54,7 +55,7 @@ function runHealthCheck() {
     });
 
     // 2. Disk Space Check
-    const disk = getDiskUsage('/');
+    const disk = getDiskUsage(getDefaultMount());
     if (disk.error) {
         checks.push({ name: 'disk_space', ok: false, status: 'check failed: ' + disk.error, severity: 'warning' });
         warnings++;

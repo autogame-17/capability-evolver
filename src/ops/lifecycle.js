@@ -22,19 +22,53 @@ function getLoopScript() {
 
 // --- Process Discovery ---
 
+function sleepMs(ms) {
+    var delay = Math.max(0, Math.floor(Number(ms) || 0));
+    if (delay <= 0) return;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
+}
+
+function execText(command) {
+    return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+}
+
+function listProcesses() {
+    if (process.platform === 'win32') {
+        var out = execText('powershell -NoProfile -Command "Get-CimInstance Win32_Process | ForEach-Object { $cmd = if ($_.CommandLine) { $_.CommandLine } else { \'\' }; Write-Output (\'{0}\\t{1}\' -f $_.ProcessId, $cmd) }"');
+        var procs = [];
+        for (var line of out.split(/\r?\n/)) {
+            if (!line || !line.trim()) continue;
+            var tabIndex = line.indexOf('\t');
+            var pidText = tabIndex >= 0 ? line.slice(0, tabIndex).trim() : line.trim();
+            var cmdText = tabIndex >= 0 ? line.slice(tabIndex + 1).trim() : '';
+            var pid = parseInt(pidText, 10);
+            if (!isNaN(pid)) procs.push({ pid: pid, args: cmdText });
+        }
+        return procs;
+    }
+    var psOut = execText('ps -e -o pid=,args=');
+    var unixProcs = [];
+    for (var psLine of psOut.split('\n')) {
+        var trimmed = psLine.trim();
+        if (!trimmed) continue;
+        var parts = trimmed.split(/\s+/);
+        var pidUnix = parseInt(parts[0], 10);
+        if (isNaN(pidUnix)) continue;
+        unixProcs.push({ pid: pidUnix, args: parts.slice(1).join(' ') });
+    }
+    return unixProcs;
+}
+
 function getRunningPids() {
     try {
-        var out = execSync('ps -e -o pid,args', { encoding: 'utf8' });
         var pids = [];
-        for (var line of out.split('\n')) {
-            var trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith('PID')) continue;
-            var parts = trimmed.split(/\s+/);
-            var pid = parseInt(parts[0], 10);
-            var cmd = parts.slice(1).join(' ');
+        for (var proc of listProcesses()) {
+            var pid = proc.pid;
+            var cmd = (proc.args || '').trim();
             if (pid === process.pid) continue;
-            if (cmd.includes('node') && cmd.includes('index.js') && cmd.includes('--loop')) {
-                if (cmd.includes('feishu-evolver-wrapper') || cmd.includes('skills/evolver')) {
+            var cmdLower = cmd.toLowerCase();
+            if (cmdLower.includes('node') && cmdLower.includes('index.js') && cmdLower.includes('--loop')) {
+                if (cmdLower.includes('feishu-evolver-wrapper') || cmdLower.includes('skills/evolver')) {
                     pids.push(pid);
                 }
             }
@@ -53,7 +87,8 @@ function getCmdLine(pid) {
     try {
         const safePid = parseInt(pid, 10);
         if (isNaN(safePid)) return null;
-        return execSync(`ps -p ${safePid} -o args=`, { encoding: 'utf8' }).trim();
+        var proc = listProcesses().find(function(p) { return p.pid === safePid; });
+        return proc ? (proc.args || '').trim() : null;
     } catch (e) {
         return null;
     }
@@ -69,8 +104,7 @@ function start(options) {
         return { status: 'already_running', pids: pids };
     }
     if (delayMs > 0) {
-        const safeDelay = parseFloat(delayMs / 1000) || 0;
-        execSync(`sleep ${safeDelay}`);
+        sleepMs(delayMs);
     }
 
     var script = getLoopScript();
@@ -107,7 +141,7 @@ function stop() {
     }
     var attempts = 0;
     while (getRunningPids().length > 0 && attempts < 10) {
-        execSync('sleep 0.5');
+        sleepMs(500);
         attempts++;
     }
     var remaining = getRunningPids();
@@ -139,9 +173,33 @@ function tailLog(lines) {
     if (!fs.existsSync(LOG_FILE)) return { error: 'No log file' };
     try {
         const n = parseInt(lines, 10) || 20;
+        const fd = fs.openSync(LOG_FILE, 'r');
+        var content = '';
+        try {
+            const stat = fs.fstatSync(fd);
+            if (stat.size > 0) {
+                const chunkSize = 64 * 1024;
+                let position = stat.size;
+                let collected = '';
+                let lineCount = 0;
+                while (position > 0 && lineCount <= n) {
+                    const readSize = Math.min(chunkSize, position);
+                    position -= readSize;
+                    const buf = Buffer.alloc(readSize);
+                    fs.readSync(fd, buf, 0, readSize, position);
+                    collected = buf.toString('utf8') + collected;
+                    lineCount = collected.split('\n').length - 1;
+                }
+                const rows = collected.split('\n');
+                if (rows.length > 0 && rows[rows.length - 1] === '') rows.pop();
+                content = rows.slice(-n).join('\n');
+            }
+        } finally {
+            fs.closeSync(fd);
+        }
         return {
             file: path.relative(WORKSPACE_ROOT, LOG_FILE),
-            content: execSync(`tail -n ${n} "${LOG_FILE}"`, { encoding: 'utf8' })
+            content
         };
     } catch (e) {
         return { error: e.message };
