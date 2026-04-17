@@ -12,7 +12,7 @@ metadata:
   capabilities:
     allow:
       - execute: [git, node, npm]
-      - network: [127.0.0.1, api.github.com]
+      - network: [127.0.0.1, api.github.com, evomap.ai]
       - read: [workspace/**]
       - write: [workspace/assets/**, workspace/memory/**]
     deny:
@@ -57,6 +57,10 @@ metadata:
     - host: api.github.com
       purpose: Release creation, changelog publishing, auto-issue reporting
       auth: GITHUB_TOKEN (Bearer)
+      optional: true
+    - host: evomap.ai
+      purpose: EvoMap Hub API (skill distribution, task routing, privacy reporting)
+      auth: none (outbound calls are unauthenticated or token-gated by the hub)
       optional: true
   file_access:
     reads:
