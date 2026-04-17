@@ -30,8 +30,13 @@ const REDACT_PATTERNS = [
   /eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]{20,}/g,
   // Azure storage connection strings (redact the key field only)
   /AccountKey=[^;\s]+/gi,
-  // Discord bot tokens (3 base64url segments: 24+ / 6+ / 27+ chars)
-  /\b[A-Za-z0-9_-]{24,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{27,}\b/g,
+  // Discord bot tokens. Three base64url segments:
+  //   1. 24+ chars starting with [MNO] (user-id snowflake, base64-encoded)
+  //   2. exactly 6 chars (timestamp)
+  //   3. 27+ chars (HMAC signature)
+  // Requiring an uppercase leading char avoids false-matching dotted
+  // lowercase identifiers (Python module paths, hostnames, etc.).
+  /\b[MNO][A-Za-z0-9_-]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}\b/g,
   // Private keys
   /-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+)?PRIVATE\s+KEY-----[\s\S]*?-----END\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+)?PRIVATE\s+KEY-----/g,
   // Basic auth in URLs (redact only credentials, keep :// and @)
@@ -86,7 +91,7 @@ const LEAK_SCANNERS = [
   { type: 'slack_token', pattern: /xox[baprsv]-[A-Za-z0-9-]{10,}/g, suggest: 'process.env.SLACK_TOKEN' },
   { type: 'jwt', pattern: /eyJ[A-Za-z0-9_\-]+\.eyJ[A-Za-z0-9_\-]+\.[A-Za-z0-9_\-]{20,}/g, suggest: 'process.env.JWT' },
   { type: 'azure_key', pattern: /AccountKey=[^;\s]+/gi, suggest: 'process.env.AZURE_STORAGE_KEY' },
-  { type: 'discord_token', pattern: /\b[MN][A-Za-z0-9]{23}\.[\w-]{6}\.[\w-]{27,}\b/g, suggest: 'process.env.DISCORD_TOKEN' },
+  { type: 'discord_token', pattern: /\b[MNO][A-Za-z0-9_-]{23,}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27,}\b/g, suggest: 'process.env.DISCORD_TOKEN' },
   { type: 'bearer_token', pattern: /Bearer\s+[A-Za-z0-9\-._~+\/]{20,}=*/g, suggest: 'process.env.AUTH_TOKEN' },
   { type: 'private_key', pattern: /-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+)?PRIVATE\s+KEY-----/g, suggest: 'process.env.PRIVATE_KEY_PATH' },
   // Database connection strings with credentials
