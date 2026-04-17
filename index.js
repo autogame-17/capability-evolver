@@ -737,7 +737,7 @@ async function main() {
         } else if (resp.status >= 500) {
           console.error('  Server error. The Hub may be temporarily unavailable.');
           console.error('  Try again in a few minutes. If the issue persists, report at:');
-          console.error('    https://github.com/autogame-17/evolver/issues');
+          console.error('    https://github.com/EvoMap/evolver/issues');
         }
         if (isVerbose) {
           console.error('[Verbose] Endpoint: ' + endpoint);

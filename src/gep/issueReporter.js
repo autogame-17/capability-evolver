@@ -11,7 +11,7 @@ const { redactString } = require('./sanitize');
 const { getNodeId } = require('./a2aProtocol');
 
 const STATE_FILE_NAME = 'issue_reporter_state.json';
-const DEFAULT_REPO = 'autogame-17/capability-evolver';
+const DEFAULT_REPO = 'EvoMap/evolver';
 const DEFAULT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MIN_STREAK = 5;
 const MAX_LOG_CHARS = 2000;

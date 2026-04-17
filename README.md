@@ -298,7 +298,7 @@ When the evolver detects persistent failures (failure loop or recurring errors w
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EVOLVER_AUTO_ISSUE` | `true` | Enable/disable auto issue reporting |
-| `EVOLVER_ISSUE_REPO` | `autogame-17/capability-evolver` | Target GitHub repository (owner/repo) |
+| `EVOLVER_ISSUE_REPO` | `EvoMap/evolver` | Target GitHub repository (owner/repo) |
 | `EVOLVER_ISSUE_COOLDOWN_MS` | `86400000` (24h) | Cooldown period for the same error signature |
 | `EVOLVER_ISSUE_MIN_STREAK` | `5` | Minimum consecutive failure streak to trigger |
 
