@@ -17,3 +17,11 @@ test/tmp/
 .evomap_node_id
 skills/
 logs/
+
+# Local runtime artifacts
+evolver.log
+evolver.pid
+package-lock.json
+evolver.log
+node_modules/
+*.log
