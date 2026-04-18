@@ -65,6 +65,15 @@ function parseMs(v, fallback) {
   return fallback;
 }
 
+function getLastSignals(statePath) {
+  try {
+    const st = readJsonSafe(statePath);
+    return (st && st.last_run && Array.isArray(st.last_run.signals)) ? st.last_run.signals : [];
+  } catch (e) {
+    return [];
+  }
+}
+
 // Singleton Guard - prevent multiple evolver daemon instances
 function acquireLock() {
   const lockFile = path.join(__dirname, 'evolver.pid');
@@ -129,12 +138,13 @@ async function main() {
     if (isLoop) {
         // Internal daemon loop (no wrapper required).
         if (!acquireLock()) process.exit(0);
-        process.on('exit', () => {
+        function shutdown() {
           releaseLock();
           try { require('./src/gep/a2aProtocol').stopEventStream(); } catch (e) {}
-        });
-        process.on('SIGINT', () => { releaseLock(); try { require('./src/gep/a2aProtocol').stopEventStream(); } catch (e) {} process.exit(); });
-        process.on('SIGTERM', () => { releaseLock(); try { require('./src/gep/a2aProtocol').stopEventStream(); } catch (e) {} process.exit(); });
+        }
+        process.on('exit', shutdown);
+        process.on('SIGINT', () => { shutdown(); process.exit(); });
+        process.on('SIGTERM', () => { shutdown(); process.exit(); });
         process.on('uncaughtException', (err) => {
           console.error('[FATAL] Uncaught exception:', err && err.stack ? err.stack : String(err));
           releaseLock();
@@ -157,7 +167,7 @@ async function main() {
         }
         console.log(`Loop mode enabled (internal daemon, bridge=${process.env.EVOLVE_BRIDGE}, verbose=${isVerbose}).`);
 
-        const { getEvolutionDir } = require('./src/gep/paths');
+        const { getEvolutionDir, getEvolverLogPath } = require('./src/gep/paths');
         const solidifyStatePath = path.join(getEvolutionDir(), 'evolution_solidify_state.json');
 
         const minSleepMs = parseMs(process.env.EVOLVER_MIN_SLEEP_MS, 2000);
@@ -217,6 +227,11 @@ async function main() {
           console.warn('[ATP] Auto-init failed: ' + (atpInitErr && atpInitErr.message || atpInitErr));
         }
 
+        // Hoist module refs used inside the loop to avoid repeated module lookups per cycle
+        const idleScheduler = require('./src/gep/idleScheduler');
+        const { shouldDistillFromFailures: shouldDF, autoDistillFromFailures: autoDF } = require('./src/gep/skillDistiller');
+        const { tryExplore } = require('./src/gep/explore');
+
         let currentSleepMs = minSleepMs;
         let cycleCount = 0;
 
@@ -263,26 +278,24 @@ async function main() {
           // operations (distillation, reflection) during detected idle windows.
           let omlsMultiplier = 1;
           try {
-            const { getScheduleRecommendation } = require('./src/gep/idleScheduler');
-            const schedule = getScheduleRecommendation();
+            const schedule = idleScheduler.getScheduleRecommendation();
             if (schedule.enabled && schedule.sleep_multiplier > 0) {
               omlsMultiplier = schedule.sleep_multiplier;
               if (schedule.should_distill) {
                 try {
-                  const { shouldDistillFromFailures: shouldDF, autoDistillFromFailures: autoDF } = require('./src/gep/skillDistiller');
                   if (shouldDF()) {
                     const dfResult = autoDF();
                     if (dfResult && dfResult.ok) {
                       console.log('[OMLS] Idle-window failure distillation: ' + dfResult.gene.id);
                     }
                   }
-                } catch (e) {}
+                } catch (e) {
+                  if (isVerbose) console.warn('[OMLS] Distill error: ' + (e.message || e));
+                }
               }
               if (schedule.should_explore) {
                 try {
-                  const { tryExplore } = require('./src/gep/explore');
-                  const repoRoot = require('./src/gep/paths').getRepoRoot();
-                  const exploreResult = await tryExplore([], schedule, repoRoot);
+                  const exploreResult = await tryExplore([], schedule, getRepoRoot());
                   if (exploreResult && exploreResult.signals && exploreResult.signals.length > 0) {
                     console.log('[OMLS] Explore discovered ' + exploreResult.signals.length + ' signals: ' + exploreResult.signals.slice(0, 5).join(', '));
                   }
@@ -294,7 +307,9 @@ async function main() {
                 console.log(`[OMLS] idle=${schedule.idle_seconds}s intensity=${schedule.intensity} multiplier=${omlsMultiplier}`);
               }
             }
-          } catch (e) {}
+          } catch (e) {
+            if (isVerbose) console.warn('[OMLS] Scheduler error: ' + (e.message || e));
+          }
 
           // Suicide check (memory leak protection)
           if (suicideEnabled) {
@@ -302,7 +317,6 @@ async function main() {
             if (cycleCount >= maxCyclesPerProcess || memMb > maxRssMb) {
               console.log(`[Daemon] Restarting self (cycles=${cycleCount}, rssMb=${memMb.toFixed(0)})`);
               try {
-                const { getEvolverLogPath } = require('./src/gep/paths');
                 const logFd = fs.openSync(getEvolverLogPath(), 'a');
                 const spawnOpts = {
                   detached: true,
@@ -322,8 +336,7 @@ async function main() {
 
           let saturationMultiplier = 1;
           try {
-            const st1 = readJsonSafe(solidifyStatePath);
-            const lastSignals = st1 && st1.last_run && Array.isArray(st1.last_run.signals) ? st1.last_run.signals : [];
+            const lastSignals = getLastSignals(solidifyStatePath);
             if (lastSignals.includes('force_steady_state')) {
               saturationMultiplier = 4;
               console.log('[Daemon] Saturation detected. Entering steady-state mode (4x sleep).');
@@ -331,14 +344,17 @@ async function main() {
               saturationMultiplier = 2;
               console.log('[Daemon] Approaching saturation. Reducing evolution frequency (2x sleep).');
             }
-          } catch (e) {}
+          } catch (e) {
+            if (isVerbose) console.warn('[Daemon] Saturation check error: ' + (e.message || e));
+          }
 
           // Jitter to avoid lockstep restarts.
           const jitter = Math.floor(Math.random() * 250);
           const totalSleepMs = Math.max(minSleepMs, (currentSleepMs + jitter) * saturationMultiplier * omlsMultiplier);
           if (isVerbose) {
             const memMb = (process.memoryUsage().rss / 1024 / 1024).toFixed(1);
-            console.log(`[Verbose] cycle=${cycleCount} ok=${ok} dt=${dt}ms sleep=${totalSleepMs}ms (base=${currentSleepMs} jitter=${jitter} sat=${saturationMultiplier}x) rss=${memMb}MB signals=[${(function() { try { var st = readJsonSafe(solidifyStatePath); return st && st.last_run && Array.isArray(st.last_run.signals) ? st.last_run.signals.join(',') : ''; } catch(e) { return ''; } })()}]`);
+            const signals = getLastSignals(solidifyStatePath).join(',');
+            console.log(`[Verbose] cycle=${cycleCount} ok=${ok} dt=${dt}ms sleep=${totalSleepMs}ms (base=${currentSleepMs} jitter=${jitter} sat=${saturationMultiplier}x) rss=${memMb}MB signals=[${signals}]`);
           }
           await sleepMs(totalSleepMs);
 
@@ -438,11 +454,11 @@ async function main() {
           if (!res || !res.ok) {
             if (res && res.validation && !res.validation.ok) {
               urgentOpts.validationFailed = true;
-              var failedStep = res.validation.results && res.validation.results.find(function (r) { return !r.ok; });
+              const failedStep = res.validation.results && res.validation.results.find(function (r) { return !r.ok; });
               urgentOpts.validationErrors = failedStep ? (failedStep.err || failedStep.cmd || '') : '';
             }
             urgentOpts.geneId = res && res.gene ? res.gene.id : undefined;
-            var evtOutcome = res && res.event && res.event.outcome;
+            const evtOutcome = res && res.event && res.event.outcome;
             if (evtOutcome && typeof evtOutcome.score === 'number' && evtOutcome.score < 0.3) {
               urgentOpts.lowConfidence = true;
               urgentOpts.confidenceScore = evtOutcome.score;
@@ -454,13 +470,13 @@ async function main() {
               urgentOpts.signals = res.event && Array.isArray(res.event.signals) ? res.event.signals : [];
             }
             if (res && res.constraintCheck && Array.isArray(res.constraintCheck.violations)) {
-              var llmRejectV = res.constraintCheck.violations.find(function (v) { return String(v).startsWith('llm_review_rejected'); });
+              const llmRejectV = res.constraintCheck.violations.find(function (v) { return String(v).startsWith('llm_review_rejected'); });
               if (llmRejectV) {
                 urgentOpts.llmReviewRejected = true;
                 urgentOpts.llmReviewReason = String(llmRejectV).replace('llm_review_rejected: ', '');
               }
             }
-            var lr = readJsonSafe(path.join(require('./src/gep/paths').getEvolutionDir(), 'evolution_solidify_state.json'));
+            const lr = readJsonSafe(path.join(require('./src/gep/paths').getEvolutionDir(), 'evolution_solidify_state.json'));
             if (lr && lr.last_run && lr.last_run.active_task_id) {
               urgentOpts.taskCompletionFailed = true;
               urgentOpts.taskTitle = lr.last_run.active_task_title || '';
@@ -473,13 +489,13 @@ async function main() {
           }
 
           if (Object.keys(urgentOpts).length > 0) {
-            var urgentQs = generateUrgentQuestions(urgentOpts);
+            const urgentQs = generateUrgentQuestions(urgentOpts);
             if (urgentQs.length > 0) {
               console.log('[UrgentQ] Generated ' + urgentQs.length + ' urgent question(s) from solidify outcome.');
               try {
-                var fetchRes = await fetchTasks({ questions: urgentQs });
+                const fetchRes = await fetchTasks({ questions: urgentQs });
                 if (fetchRes.questions_created) {
-                  var accepted = fetchRes.questions_created.filter(function (q) { return !q.error; });
+                  const accepted = fetchRes.questions_created.filter(function (q) { return !q.error; });
                   if (accepted.length > 0) {
                     console.log('[UrgentQ] Hub accepted ' + accepted.length + ' urgent question(s) as bounties.');
                   }
