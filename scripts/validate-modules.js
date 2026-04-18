@@ -8,7 +8,13 @@ if (!modules.length) { console.error('No modules specified'); process.exit(1); }
 let checked = 0;
 for (const m of modules) {
   const resolved = path.resolve(m);
-  const exported = require(resolved);
+  let exported;
+  try {
+    exported = require(resolved);
+  } catch (e) {
+    console.error('FAIL: ' + m + ' failed to load: ' + (e && e.message ? e.message : String(e)));
+    process.exit(1);
+  }
 
   if (exported === undefined || exported === null) {
     console.error('FAIL: ' + m + ' exports null/undefined');

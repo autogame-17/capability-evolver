@@ -76,6 +76,7 @@ function getLastSignals(statePath) {
 
 // Singleton Guard - prevent multiple evolver daemon instances
 function acquireLock() {
+  const { LOCK_MAX_AGE_MS } = require('./src/config');
   const lockFile = path.join(__dirname, 'evolver.pid');
   try {
     try {
@@ -84,9 +85,23 @@ function acquireLock() {
     } catch (exclErr) {
       if (exclErr.code !== 'EEXIST') throw exclErr;
     }
+    // Lock file exists - check if it's stale
+    try {
+      const stat = fs.statSync(lockFile);
+      const ageMs = Date.now() - stat.mtime.getTime();
+      if (ageMs > LOCK_MAX_AGE_MS) {
+        console.log('[Singleton] Lock file is stale (age=' + ageMs + 'ms > max=' + LOCK_MAX_AGE_MS + 'ms). Taking over.');
+        fs.writeFileSync(lockFile, String(process.pid));
+        return true;
+      }
+    } catch (statErr) {
+      // If we can't stat the lock file, proceed with PID check
+    }
     const pid = parseInt(fs.readFileSync(lockFile, 'utf8').trim(), 10);
     if (!Number.isFinite(pid) || pid <= 0) {
       console.log('[Singleton] Corrupt lock file (invalid PID). Taking over.');
+      fs.writeFileSync(lockFile, String(process.pid));
+      return true;
     } else {
       try {
         process.kill(pid, 0);
@@ -522,6 +537,15 @@ async function main() {
       process.exit(1);
     }
     const responseFilePath = responseFileFlag.slice('--response-file='.length);
+    // Security: Validate response file path is within repo root
+    const { getRepoRoot } = require('./src/gep/paths');
+    const path = require('path');
+    const resolvedResponsePath = path.resolve(responseFilePath);
+    const resolvedRepoRoot = path.resolve(getRepoRoot());
+    if (responseFilePath.includes('..') || !resolvedResponsePath.startsWith(resolvedRepoRoot)) {
+      console.error('[Distill] ERROR: Invalid response-file path "' + responseFilePath + '" - path traversal detected or path is outside the repository.');
+      process.exit(2);
+    }
     try {
       const responseText = fs.readFileSync(responseFilePath, 'utf8');
       const { completeDistillation } = require('./src/gep/skillDistiller');
@@ -766,9 +790,19 @@ async function main() {
       const data = await resp.json();
       const outFlag = args.find(a => typeof a === 'string' && a.startsWith('--out='));
       const safeId = String(data.skill_id || skillId).replace(/[^a-zA-Z0-9_\-\.]/g, '_');
-      const outDir = outFlag
+      var outDir = outFlag
         ? outFlag.slice('--out='.length)
         : path.join('.', 'skills', safeId);
+
+      // Security: Validate outDir is within repo root (workspace or repo root)
+      const { getRepoRoot, getWorkspaceRoot } = require('./src/gep/paths');
+      const resolvedOutDir = path.resolve(outDir);
+      const resolvedWorkspaceRoot = path.resolve(getWorkspaceRoot());
+      const resolvedRepoRoot2 = path.resolve(getRepoRoot());
+      if (outFlag && (outDir.includes('..') || (!resolvedOutDir.startsWith(resolvedWorkspaceRoot) && !resolvedOutDir.startsWith(resolvedRepoRoot2)))) {
+        console.error('[fetch] ERROR: Invalid --out path "' + outDir + '" - path traversal detected or path is outside the allowed workspace.');
+        process.exit(1);
+      }
 
       if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
 

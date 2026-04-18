@@ -10,6 +10,7 @@ function main() {
   var withHello = args.includes('--hello');
   var persist = args.includes('--persist');
   var includeEvents = args.includes('--include-events');
+  var dryRun = args.includes('--dry-run');
 
   var capsules = loadCapsules();
   var genes = loadGenes();
@@ -27,7 +28,7 @@ function main() {
     for (var ei = 0; ei < eligibleEvents.length; ei++) {
       var ev = eligibleEvents[ei];
       if (!ev.schema_version) ev.schema_version = SCHEMA_VERSION;
-      if (!ev.asset_id) { try { ev.asset_id = computeAssetId(ev); } catch (e) {} }
+      if (!ev.asset_id) { try { ev.asset_id = computeAssetId(ev); } catch (e) { console.error('[a2a_export] ERROR: Failed to compute asset_id for event: ' + (e && e.message ? e.message : String(e))); } }
     }
     eligible = eligible.concat(eligibleEvents);
   }
@@ -35,14 +36,24 @@ function main() {
   if (withHello || asProtocol) {
     var hello = buildHello({ geneCount: genes.length, capsuleCount: capsules.length });
     process.stdout.write(JSON.stringify(hello) + '\n');
-    if (persist) { try { getTransport().send(hello); } catch (e) {} }
+    if (persist && !dryRun) {
+      try { getTransport().send(hello); }
+      catch (e) { console.error('[a2a_export] ERROR: Failed to send hello via transport: ' + (e && e.message ? e.message : String(e))); }
+    } else if (dryRun) {
+      process.stdout.write('[dry-run] Would send hello message\n');
+    }
   }
 
   if (asProtocol) {
     for (var i = 0; i < eligible.length; i++) {
       var msg = buildPublish({ asset: eligible[i] });
       process.stdout.write(JSON.stringify(msg) + '\n');
-      if (persist) { try { getTransport().send(msg); } catch (e) {} }
+      if (persist && !dryRun) {
+        try { getTransport().send(msg); }
+        catch (e) { console.error('[a2a_export] ERROR: Failed to send publish message for asset ' + (eligible[i] && eligible[i].asset_id ? eligible[i].asset_id : '?') + ': ' + (e && e.message ? e.message : String(e))); }
+      } else if (dryRun) {
+        process.stdout.write('[dry-run] Would send publish message for asset ' + (eligible[i] && eligible[i].asset_id ? eligible[i].asset_id : '?') + '\n');
+      }
     }
     return;
   }

@@ -1,5 +1,31 @@
 const fs = require('fs');
+const path = require('path');
 const { appendEventJsonl } = require('../src/gep/assetStore');
+const paths = require('../src/gep/paths');
+
+function isPathSafe(inputPath) {
+  // Resolve the path to its absolute form
+  var resolved;
+  try {
+    resolved = path.resolve(inputPath);
+  } catch (e) {
+    return false;
+  }
+  // Get the repo root and ensure the resolved path is within it
+  var repoRoot;
+  try {
+    repoRoot = paths.getRepoRoot();
+  } catch (e) {
+    return false;
+  }
+  // Resolve repo root as well for accurate comparison
+  var resolvedRoot = path.resolve(repoRoot);
+  // Check for path traversal sequences
+  if (inputPath.includes('..')) return false;
+  // Ensure the resolved path starts with the repo root
+  if (!resolved.startsWith(resolvedRoot)) return false;
+  return true;
+}
 
 function readStdin() {
   try {
@@ -73,7 +99,20 @@ function isValidEvolutionEvent(ev) {
 
 function main() {
   const args = process.argv.slice(2);
+  const asJson = args.includes('--json');
   const inputPath = args.find(a => a && !a.startsWith('--')) || '';
+
+  // Security: Validate inputPath is within repo root
+  if (inputPath && !isPathSafe(inputPath)) {
+    const errMsg = '[gep_append_event] ERROR: Invalid inputPath "' + inputPath + '" - must be within the evolver directory and contain no path traversal sequences.';
+    if (asJson) {
+      process.stdout.write(JSON.stringify({ error: errMsg, appended: 0 }) + '\n');
+    } else {
+      process.stderr.write(errMsg + '\n');
+    }
+    process.exit(1);
+  }
+
   const text = inputPath ? readTextIfExists(inputPath) : readStdin();
   const items = parseInput(text);
 
@@ -84,7 +123,11 @@ function main() {
     appended += 1;
   }
 
-  process.stdout.write(`appended=${appended}\n`);
+  if (asJson) {
+    process.stdout.write(JSON.stringify({ appended: appended }) + '\n');
+  } else {
+    process.stdout.write('appended=' + appended + '\n');
+  }
 }
 
 try {
