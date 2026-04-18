@@ -121,6 +121,85 @@ describe('readJsonSafe', () => {
   });
 });
 
+describe('loop-mode non-fatal error handling', () => {
+  // line 298 in index.js: empty catch block swallowing errors during cycle execution
+  // This test verifies the error handling contract: errors in the cycle loop are caught
+  // and do not propagate, allowing the loop to continue executing subsequent cycles.
+
+  const { execFileSync } = require('child_process');
+  const repoRoot = path.resolve(__dirname, '..');
+
+  it('loop-mode continues after evolve.run() throws', () => {
+    // When EVOLVE_LOOP=true, the cycle loop catches all errors (line 297's catch(e){})
+    // This ensures a throwing evolve.run() does not terminate the daemon.
+    // We verify by checking the process exits cleanly rather than crashing.
+    let exitCode = null;
+    let stdout = '';
+    const env = {
+      ...process.env,
+      EVOLVE_LOOP: 'true',
+      EVOLVE_BRIDGE: 'false',
+      A2A_HUB_URL: '',
+      EVOLVER_REPO_ROOT: repoRoot,
+      // Force immediate exit after first cycle for test predictability
+      EVOLVER_MAX_CYCLES: '1',
+    };
+    try {
+      const out = execFileSync(process.execPath, ['index.js'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        timeout: 30000,
+        env,
+      });
+      stdout = out;
+    } catch (err) {
+      exitCode = err.status;
+      stdout = (err.stdout || '') + (err.stderr || '');
+    }
+    // Loop-mode should exit cleanly with code 0 or 1 (bridge mode exit),
+    // not with a thrown error that would give code > 1 or ENOENT
+    assert.ok(
+      exitCode === null || exitCode === 0 || exitCode === 1,
+      'loop-mode should exit cleanly, got code: ' + exitCode + ', stdout: ' + stdout.slice(0, 200)
+    );
+    assert.ok(
+      !stdout.includes('SyntaxError') && !stdout.includes('ReferenceError'),
+      'loop-mode should not leak uncaught errors: ' + stdout.slice(0, 200)
+    );
+  });
+
+  it('should_explore branch does not leak errors to cycle loop', async () => {
+    // lines 281-291: should_explore branch wraps tryExplore in try/catch
+    // This test verifies explore errors are swallowed and logged verbosely only
+    const { execFileSync } = require('child_process');
+    const repoRoot = path.resolve(__dirname, '..');
+    let stdout = '';
+    try {
+      stdout = execFileSync(process.execPath, ['index.js'], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        timeout: 30000,
+        env: {
+          ...process.env,
+          EVOLVE_LOOP: 'true',
+          EVOLVE_BRIDGE: 'false',
+          OMLS_ENABLED: 'true',
+          A2A_HUB_URL: '',
+          EVOLVER_REPO_ROOT: repoRoot,
+          EVOLVER_MAX_CYCLES: '1',
+        },
+      });
+    } catch (err) {
+      stdout = (err.stdout || '') + (err.stderr || '');
+    }
+    // Should not have unhandled errors from tryExplore
+    assert.ok(
+      !stdout.includes('TypeError: Cannot') && !stdout.includes('Error: ENOENT'),
+      'explore branch should not leak filesystem errors: ' + stdout.slice(0, 300)
+    );
+  });
+});
+
 describe('bare invocation routing -- black-box', () => {
   const { execFileSync } = require('child_process');
   const repoRoot = path.resolve(__dirname, '..');

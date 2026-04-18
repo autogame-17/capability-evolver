@@ -104,4 +104,39 @@ describe('getScheduleRecommendation', function () {
     assert.equal(typeof rec.should_deep_evolve, 'boolean');
     assert.equal(typeof rec.should_explore, 'boolean');
   });
+
+  it('should_explore=true implies aggressive or deep intensity', function () {
+    // When should_explore is true (lines 128, 134 in idleScheduler.js), intensity
+    // must be 'aggressive' or 'deep' - this is a consistency contract from the loop
+    // runtime refactor (index.js line 281).
+    var rec = getScheduleRecommendation();
+    if (rec.should_explore === true) {
+      assert.ok(
+        rec.intensity === 'aggressive' || rec.intensity === 'deep',
+        'should_explore=true but intensity=' + rec.intensity
+      );
+      // In aggressive/deep, distill and reflect are also enabled
+      assert.equal(rec.should_distill, true, 'aggressive/deep must have should_distill=true');
+      assert.equal(rec.should_reflect, true, 'aggressive/deep must have should_reflect=true');
+    }
+  });
+
+  it('should_deep_evolve=true implies should_explore=true', function () {
+    // Deep mode always includes explore (line 134 in idleScheduler.js)
+    var rec = getScheduleRecommendation();
+    if (rec.should_deep_evolve === true) {
+      assert.equal(rec.should_explore, true, 'deep mode must have should_explore=true');
+    }
+  });
+
+  it('OMLS_ENABLED=false forces all action flags to false', function () {
+    process.env.OMLS_ENABLED = 'false';
+    var rec = getScheduleRecommendation();
+    assert.equal(rec.enabled, false);
+    assert.equal(rec.should_distill, false);
+    assert.equal(rec.should_reflect, false);
+    assert.equal(rec.should_deep_evolve, false);
+    assert.equal(rec.should_explore, false);
+    delete process.env.OMLS_ENABLED;
+  });
 });
