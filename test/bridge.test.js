@@ -98,6 +98,11 @@ describe('determineBridgeEnabled -- black-box via child_process', () => {
     const cleanEnv = { ...process.env };
     delete cleanEnv.EVOLVE_BRIDGE;
     delete cleanEnv.OPENCLAW_WORKSPACE;
+    // Ensure stable, plain stdout for assertions even if the parent test runner
+    // enables color output.
+    delete cleanEnv.FORCE_COLOR;
+    delete cleanEnv.CLICOLOR_FORCE;
+    cleanEnv.NODE_DISABLE_COLORS = '1';
     return execFileSync(process.execPath, ['-e', script], {
       cwd: require('path').resolve(__dirname, '..'),
       encoding: 'utf8',
