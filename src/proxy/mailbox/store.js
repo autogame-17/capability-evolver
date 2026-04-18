@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const DEFAULT_CHANNEL = 'evomap-hub';
 const SCHEMA_VERSION = 1;
 const PROXY_PROTOCOL_VERSION = '0.1.0';
+const COMPACT_THRESHOLD_BYTES = 10 * 1024 * 1024; // 10MB
 
 // --- UUID v7 (RFC 9562) ---
 // Bits 0-47: unix_ts_ms, Bits 48-51: ver=0b0111, Bits 52-63: rand_a,
@@ -77,6 +78,7 @@ class MailboxStore {
 
     this._loadState();
     this._rebuildIndex();
+    if (this._shouldCompact()) this._compact();
   }
 
   _loadState() {
@@ -107,7 +109,31 @@ class MailboxStore {
   _persistState() {
     const dir = path.dirname(this._stateFile);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(this._stateFile, JSON.stringify(this._state, null, 2) + '\n', 'utf8');
+    const tmp = `${this._stateFile}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(this._state, null, 2) + '\n', 'utf8');
+    fs.renameSync(tmp, this._stateFile);
+  }
+
+  _shouldCompact() {
+    try {
+      return fs.statSync(this._messagesFile).size > COMPACT_THRESHOLD_BYTES;
+    } catch {
+      return false;
+    }
+  }
+
+  // Rewrite messages.jsonl keeping only active (non-terminal) messages in their
+  // resolved state. Safe to call after _rebuildIndex() since this._messages
+  // already has all _op:update entries merged in.
+  _compact() {
+    const TERMINAL = new Set(['synced', 'delivered', 'failed', 'rejected']);
+    const lines = [];
+    for (const [, msg] of this._messages) {
+      if (!TERMINAL.has(msg.status)) lines.push(JSON.stringify(msg));
+    }
+    const tmp = `${this._messagesFile}.tmp`;
+    fs.writeFileSync(tmp, lines.join('\n') + (lines.length ? '\n' : ''), 'utf8');
+    fs.renameSync(tmp, this._messagesFile);
   }
 
   _rebuildIndex() {
