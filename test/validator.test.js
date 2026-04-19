@@ -32,7 +32,11 @@ function mkRes({ status = 200, body = {}, ok = true } = {}) {
 
 describe('sandboxExecutor.runInSandbox', function () {
   it('runs a passing command inside an isolated temp dir', async function () {
-    const out = await sandbox.runInSandbox(['echo hello-sandbox && pwd'], {});
+    const cmd = process.platform === 'win32'
+      ? 'echo hello-sandbox && cd'
+      : 'echo hello-sandbox && pwd';
+
+    const out = await sandbox.runInSandbox([cmd], {});
     assert.equal(out.results.length, 1);
     assert.equal(out.overallOk, true);
     assert.match(out.results[0].stdout, /hello-sandbox/);
@@ -56,20 +60,30 @@ describe('sandboxExecutor.runInSandbox', function () {
   });
 
   it('enforces per-command timeout (kills long-running commands)', async function () {
-    const out = await sandbox.runInSandbox(['sleep 5'], { cmdTimeoutMs: 300 });
+    const longCmd = process.platform === 'win32'
+      ? 'ping -n 6 127.0.0.1 > nul'
+      : 'sleep 5';
+
+    const out = await sandbox.runInSandbox([longCmd], { cmdTimeoutMs: 300 });
     assert.equal(out.overallOk, false);
     assert.equal(out.results[0].timedOut, true);
   });
 
   it('cleans up sandbox directory after execution', async function () {
     let captured;
-    const out = await sandbox.runInSandbox(['pwd'], { keepSandbox: true });
+
+    const cmd = process.platform === 'win32' ? 'cd' : 'pwd';
+
+    const out = await sandbox.runInSandbox([cmd], { keepSandbox: true });
     captured = out.sandboxDir;
+
     assert.ok(captured);
     assert.ok(fs.existsSync(captured));
+
     // Now call with cleanup (default).
-    const out2 = await sandbox.runInSandbox(['pwd'], {});
+    const out2 = await sandbox.runInSandbox([cmd], {});
     assert.equal(out2.sandboxDir, null);
+
     sandbox.cleanupDir(captured);
   });
 

@@ -1,6 +1,10 @@
 const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
+function stripAnsi(str) {
+  return str.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+}
+
 const savedEnv = {};
 const envKeys = ['EVOLVE_BRIDGE', 'OPENCLAW_WORKSPACE'];
 
@@ -95,15 +99,26 @@ describe('determineBridgeEnabled -- black-box via child_process', () => {
       const { determineBridgeEnabled } = require('./src/evolve');
       console.log(determineBridgeEnabled());
     `;
-    const cleanEnv = { ...process.env };
+    const cleanEnv = {
+      ...process.env,
+      NODE_DISABLE_COLORS: '1',
+      NO_COLOR: '1',
+      FORCE_COLOR: '0'
+    };
+
     delete cleanEnv.EVOLVE_BRIDGE;
     delete cleanEnv.OPENCLAW_WORKSPACE;
-    return execFileSync(process.execPath, ['-e', script], {
+    cleanEnv.NODE_DISABLE_COLORS = '1';
+    cleanEnv.NO_COLOR = '1';
+    cleanEnv.FORCE_COLOR = '0';
+    const output = execFileSync(process.execPath, ['-e', script], {
       cwd: require('path').resolve(__dirname, '..'),
       encoding: 'utf8',
       timeout: 10000,
       env: cleanEnv,
-    }).trim();
+    });
+
+    return stripAnsi(output).trim();
   }
 
   it('standalone mode: bridge off', () => {
