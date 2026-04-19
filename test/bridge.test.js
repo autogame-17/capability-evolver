@@ -98,6 +98,13 @@ describe('determineBridgeEnabled -- black-box via child_process', () => {
     const cleanEnv = { ...process.env };
     delete cleanEnv.EVOLVE_BRIDGE;
     delete cleanEnv.OPENCLAW_WORKSPACE;
+    // Disable ANSI color in the child so stdout comparisons stay deterministic
+    // regardless of the parent shell's FORCE_COLOR setting. Without this, a
+    // parent that exported FORCE_COLOR=1 (common under some CI runners) can
+    // make the child print escape-coded booleans and the `.trim()` output
+    // becomes e.g. `\u001b[32mtrue\u001b[39m` instead of `true`.
+    cleanEnv.FORCE_COLOR = '0';
+    cleanEnv.NO_COLOR = '1';
     return execFileSync(process.execPath, ['-e', script], {
       cwd: require('path').resolve(__dirname, '..'),
       encoding: 'utf8',
