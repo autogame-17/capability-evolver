@@ -2,7 +2,7 @@ const { describe, it, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 function stripAnsi(str) {
-  return str.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, "");
+  return str.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
 }
 
 const savedEnv = {};
