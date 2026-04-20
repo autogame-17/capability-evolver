@@ -36,19 +36,20 @@ function getSystemIdleSeconds() {
       ].join('\n');
       const tmpPs = path.join(require('os').tmpdir(), 'evolver_idle_check.ps1');
       require('fs').writeFileSync(tmpPs, psCode, 'utf8');
-      const result = execSync('powershell -NoProfile -ExecutionPolicy Bypass -File "' + tmpPs + '"', { timeout: 10000, encoding: 'utf8' }).trim();
+      const MAX_EXEC_BUFFER = 64 * 1024; // idle check output is tiny; cap at 64KB
+      const result = execSync('powershell -NoProfile -ExecutionPolicy Bypass -File "' + tmpPs + '"', { timeout: 10000, encoding: 'utf8', maxBuffer: MAX_EXEC_BUFFER }).trim();
       try { require('fs').unlinkSync(tmpPs); } catch (e) {}
       const seconds = parseInt(result, 10);
       return Number.isFinite(seconds) ? seconds : -1;
     } else if (platform === 'darwin') {
-      const result = execSync('ioreg -c IOHIDSystem | grep HIDIdleTime', { timeout: 5000, encoding: 'utf8' });
+      const result = execSync('ioreg -c IOHIDSystem | grep HIDIdleTime', { timeout: 5000, encoding: 'utf8', maxBuffer: 64 * 1024 });
       const match = result.match(/(\d+)/);
       if (match) {
         return Math.floor(parseInt(match[1], 10) / 1000000000);
       }
     } else if (platform === 'linux') {
       try {
-        const result = execSync('xprintidle 2>/dev/null || echo -1', { timeout: 5000, encoding: 'utf8' }).trim();
+        const result = execSync('xprintidle 2>/dev/null || echo -1', { timeout: 5000, encoding: 'utf8', maxBuffer: 64 * 1024 }).trim();
         const ms = parseInt(result, 10);
         if (Number.isFinite(ms) && ms >= 0) return Math.floor(ms / 1000);
       } catch (e) {}

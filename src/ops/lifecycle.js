@@ -30,8 +30,10 @@ function sleepMs(ms) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
 }
 
+const MAX_EXEC_BUFFER = 10 * 1024 * 1024; // 10MB — ps/PowerShell output can be large
+
 function execText(command) {
-    return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 15000, maxBuffer: MAX_EXEC_BUFFER });
 }
 
 function listProcesses() {

@@ -6,10 +6,12 @@ const path = require('path');
 const { execSync } = require('child_process');
 const { getRepoRoot } = require('./paths');
 
+const MAX_EXEC_BUFFER = 10 * 1024 * 1024; // 10MB — prevents RangeError on large diffs
+
 function runCmd(cmd, opts = {}) {
   const cwd = opts.cwd || getRepoRoot();
   const timeoutMs = Number.isFinite(Number(opts.timeoutMs)) ? Number(opts.timeoutMs) : 120000;
-  return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs, windowsHide: true });
+  return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs, maxBuffer: MAX_EXEC_BUFFER, windowsHide: true });
 }
 
 function tryRunCmd(cmd, opts = {}) {
@@ -76,7 +78,7 @@ function isGitRepo(dir) {
   try {
     execSync('git rev-parse --git-dir', {
       cwd: dir, encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000,
+      stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000, maxBuffer: MAX_EXEC_BUFFER,
     });
     return true;
   } catch (_) {

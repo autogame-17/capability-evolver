@@ -13,6 +13,8 @@
 //  - Total batch timeout defaults to 180s.
 //  - Collect stdout/stderr truncated to 4000 chars each to match
 //    ValidationReport.command.stdout/stderr schema on the Hub.
+//  - Commands are parsed into argv arrays and spawned with shell:false
+//    to eliminate shell injection risk entirely.
 //
 // This module is intentionally simple and has no external dependencies.
 'use strict';
@@ -28,10 +30,42 @@ const MAX_CMD_TIMEOUT_MS = 120_000;
 const DEFAULT_BATCH_TIMEOUT_MS = 180_000;
 const MAX_OUTPUT_CHARS = 4000;
 
+const ALLOWED_EXECUTABLES = new Set(['node', 'npm', 'npx']);
+
 function safeNumber(v, fallback) {
   const n = Number(v);
   if (!Number.isFinite(n) || n <= 0) return fallback;
   return n;
+}
+
+// Parse a command string into { executable, args } without invoking a shell.
+// Handles single and double quoted segments; strips surrounding quotes.
+// Throws if the executable is not in ALLOWED_EXECUTABLES.
+function parseCommand(cmdString) {
+  const parts = [];
+  let current = '';
+  let inQuote = null;
+  for (const ch of String(cmdString)) {
+    if (!inQuote && (ch === '"' || ch === "'")) {
+      inQuote = ch;
+    } else if (inQuote && ch === inQuote) {
+      inQuote = null;
+    } else if (!inQuote && ch === ' ') {
+      if (current.length > 0) { parts.push(current); current = ''; }
+    } else {
+      current += ch;
+    }
+  }
+  if (current.length > 0) parts.push(current);
+  if (parts.length === 0) throw new Error('sandbox: empty command');
+
+  // Normalise: accept 'node', '/usr/bin/node', 'node.exe' — compare basename
+  const rawExe = parts[0];
+  const baseName = rawExe.replace(/\\/g, '/').split('/').pop().replace(/\.exe$/i, '').toLowerCase();
+  if (!ALLOWED_EXECUTABLES.has(baseName)) {
+    throw new Error(`sandbox: executable not allowed: ${rawExe}`);
+  }
+  return { executable: rawExe, args: parts.slice(1) };
 }
 
 function truncate(str, limit) {
@@ -86,8 +120,9 @@ function runSingleCommand(cmd, opts) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(String(cmd), {
-        shell: true,
+      const { executable, args } = parseCommand(cmd);
+      child = spawn(executable, args, {
+        shell: false,
         cwd,
         env,
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -255,6 +290,8 @@ module.exports = {
   createSandboxDir,
   cleanupDir,
   buildSandboxEnv,
+  parseCommand,
+  ALLOWED_EXECUTABLES,
   DEFAULT_CMD_TIMEOUT_MS,
   MAX_CMD_TIMEOUT_MS,
   DEFAULT_BATCH_TIMEOUT_MS,

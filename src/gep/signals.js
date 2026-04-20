@@ -229,66 +229,77 @@ function _extractKeywordScore(lower) {
 // Signal Extraction Strategy: LLM Semantic Analysis (Layer 3)
 // Sends a corpus summary to the Hub for LLM-based signal extraction.
 // Rate-limited to every N evolution cycles. Falls back silently on failure.
+//
+// Implementation: uses Node 18+ native fetch() to avoid blocking the event
+// loop. extractSignals() callers that want LLM signals must await the async
+// variant; the sync wrapper returns [] immediately and schedules a background
+// fetch whose results are merged into the next cycle.
 // ---------------------------------------------------------------------------
 var _llmSignalCycleCount = 0;
 var LLM_SIGNAL_INTERVAL = 5;
+var _pendingLLMSignals = [];   // Signals resolved from previous async fetch
+var _llmFetchInFlight = false; // Prevents concurrent fetches
 
 function _extractLLM(corpus) {
   _llmSignalCycleCount++;
-  if (_llmSignalCycleCount % LLM_SIGNAL_INTERVAL !== 1) return [];
 
+  // Drain results from the previous background fetch
+  var resolved = _pendingLLMSignals.slice();
+  _pendingLLMSignals = [];
+
+  // Kick off a new background fetch every LLM_SIGNAL_INTERVAL cycles
+  if (_llmSignalCycleCount % LLM_SIGNAL_INTERVAL === 1 && !_llmFetchInFlight) {
+    _fetchLLMSignalsAsync(corpus);
+  }
+
+  return resolved;
+}
+
+function _fetchLLMSignalsAsync(corpus) {
   try {
     var getHubUrl = require('./a2aProtocol').getHubUrl;
     var getHubNodeSecret = require('./a2aProtocol').getHubNodeSecret;
     var getNodeId = require('./a2aProtocol').getNodeId;
     var hubUrl = getHubUrl();
     var nodeSecret = getHubNodeSecret();
-    if (!hubUrl || !nodeSecret) return [];
+    if (!hubUrl || !nodeSecret) return;
 
     var summary = corpus.slice(0, 2000);
-    var postData = JSON.stringify({
+    var body = JSON.stringify({
       corpus_summary: summary,
       signal_types: OPPORTUNITY_SIGNALS,
       sender_id: getNodeId() || undefined,
     });
 
-    var url = hubUrl + '/a2a/signal/analyze';
+    _llmFetchInFlight = true;
 
-    // Use execFileSync (no shell) + curl argv array so postData/url/nodeSecret
-    // are passed as discrete argv entries. This eliminates any possibility of
-    // shell metacharacters in the corpus (which flows into postData) being
-    // interpreted by a shell. Sync HTTP is required because this runs inside
-    // a spin-wait loop where Node's async http callbacks cannot fire.
-    var execFileSync = require('child_process').execFileSync;
-    var stdout = '';
-    try {
-      stdout = execFileSync('curl', [
-        '-s', '-m', '10', '-X', 'POST',
-        '-H', 'Content-Type: application/json',
-        '-H', 'Authorization: Bearer ' + nodeSecret,
-        '-d', postData,
-        url,
-      ], {
-        timeout: 12000,
-        windowsHide: true,
-        stdio: ['pipe', 'pipe', 'pipe'],
-        encoding: 'utf8',
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, 10000);
+
+    fetch(hubUrl + '/a2a/signal/analyze', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + nodeSecret,
+      },
+      body: body,
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (Array.isArray(data && data.signals)) {
+          _pendingLLMSignals = data.signals.filter(function (s) {
+            return typeof s === 'string' && s.length > 0 && s.length < 200;
+          }).slice(0, 10);
+        }
+      })
+      .catch(function () { /* silent fallback — hub unreachable */ })
+      .finally(function () {
+        clearTimeout(timer);
+        _llmFetchInFlight = false;
       });
-    } catch (_) {
-      return [];
-    }
-
-    if (!stdout || typeof stdout !== 'string') return [];
-
-    var parsed = JSON.parse(stdout);
-    if (Array.isArray(parsed.signals)) {
-      return parsed.signals.filter(function (s) {
-        return typeof s === 'string' && s.length > 0 && s.length < 200;
-      }).slice(0, 10);
-    }
-    return [];
-  } catch (e) {
-    return [];
+  } catch (_) {
+    _llmFetchInFlight = false;
   }
 }
 

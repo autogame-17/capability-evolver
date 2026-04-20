@@ -34,7 +34,7 @@ describe('sandboxExecutor.runInSandbox', function () {
   const isWin = process.platform === 'win32';
 
   it('runs a passing command inside an isolated temp dir', async function () {
-    const cmd = isWin ? 'echo hello-sandbox && cd' : 'echo hello-sandbox && pwd';
+    const cmd = 'node -e "process.stdout.write(\'hello-sandbox\\n\' + process.cwd() + \'\\n\')"';
     const out = await sandbox.runInSandbox([cmd], {});
     assert.equal(out.results.length, 1);
     assert.equal(out.overallOk, true);
@@ -46,9 +46,9 @@ describe('sandboxExecutor.runInSandbox', function () {
 
   it('stops at first failure and reports overallOk=false', async function () {
     const out = await sandbox.runInSandbox([
-      'echo first',
-      'exit 2',
-      'echo should-not-run',
+      'node -e "process.stdout.write(\'first\\n\')"',
+      'node -e "process.exit(2)"',
+      'node -e "process.stdout.write(\'should-not-run\\n\')"',
     ], {});
     assert.equal(out.overallOk, false);
     assert.equal(out.stoppedEarly, true);
@@ -59,14 +59,14 @@ describe('sandboxExecutor.runInSandbox', function () {
   });
 
   it('enforces per-command timeout (kills long-running commands)', async function () {
-    const longCmd = isWin ? 'ping -n 6 127.0.0.1 > nul' : 'sleep 5';
+    const longCmd = 'node -e "setTimeout(()=>{},9999)"';
     const out = await sandbox.runInSandbox([longCmd], { cmdTimeoutMs: 300 });
     assert.equal(out.overallOk, false);
     assert.equal(out.results[0].timedOut, true);
   });
 
   it('cleans up sandbox directory after execution', async function () {
-    const cmd = isWin ? 'cd' : 'pwd';
+    const cmd = 'node -e "process.exit(0)"';
     let captured;
     const out = await sandbox.runInSandbox([cmd], { keepSandbox: true });
     captured = out.sandboxDir;
@@ -172,7 +172,7 @@ describe('validator.runValidatorCycle', function () {
                 task_id: 'vt_fail',
                 nonce: 'nonce_abc',
                 asset_id: 'asset_x',
-                validation_commands: ['echo ok', 'exit 1'],
+                validation_commands: ['node -e "process.stdout.write(\'ok\\n\')"', 'node -e "process.exit(1)"'],
                 expires_at: new Date(Date.now() + 60000).toISOString(),
               },
             ],
@@ -209,7 +209,7 @@ describe('validator.runValidatorCycle', function () {
               {
                 task_id: 'vt_ok',
                 nonce: 'nonce_xyz',
-                validation_commands: ['echo alpha', 'echo beta'],
+                validation_commands: ['node -e "process.stdout.write(\'alpha\\n\')"', 'node -e "process.stdout.write(\'beta\\n\')"'],
               },
             ],
           },

@@ -45,6 +45,8 @@ function findMemoryGraph(evolverRoot) {
   return null;
 }
 
+const MAX_EXEC_BUFFER = 10 * 1024 * 1024; // git diff can be large
+
 function getGitDiffStats() {
   try {
     const cwd = process.cwd();
@@ -52,11 +54,13 @@ function getGitDiffStats() {
       cwd,
       encoding: 'utf8',
       timeout: 5000,
+      maxBuffer: MAX_EXEC_BUFFER,
     }).trim();
     const diffContent = execSync('git diff HEAD~1 --no-color 2>/dev/null || git diff --no-color 2>/dev/null || echo ""', {
       cwd,
       encoding: 'utf8',
       timeout: 5000,
+      maxBuffer: MAX_EXEC_BUFFER,
     }).trim();
     const filesChanged = (stat.match(/\d+ files? changed/) || ['0'])[0];
     const insertions = (stat.match(/(\d+) insertions?/) || [null, '0'])[1];

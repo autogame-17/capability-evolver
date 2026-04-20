@@ -479,17 +479,17 @@ describe('extractSignals -- multi-strategy integration', () => {
 });
 
 describe('signals.js source hardening (GHSA-j5w5-568x-rq53)', () => {
-  it('does not use execSync with string-concatenated shell commands', () => {
+  it('does not use execSync / execFileSync for HTTP calls', () => {
     const fs = require('fs');
     const path = require('path');
     const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'gep', 'signals.js'), 'utf8');
-    // The vulnerability stemmed from execSync(curlCmd) where curlCmd was built
-    // via string concat that interpolated user-derived data. The fix uses
-    // execFileSync with an argv array so no shell is involved. Guard against
-    // anyone re-introducing execSync for curl.
+    // Original vulnerability: execSync(curlCmd) where curlCmd interpolated user data.
+    // First fix: execFileSync with argv array (no shell).
+    // Current fix: native fetch() — no child process at all. Guard both regressions.
     assert.ok(!/execSync\s*\(\s*curlCmd/.test(src), 'execSync(curlCmd) is forbidden (command injection)');
-    assert.ok(!/execSync\([^)]*['\"]curl /.test(src), 'execSync with inline curl string is forbidden');
-    // execFileSync is the mandated replacement.
-    assert.ok(/execFileSync/.test(src), 'signals.js must use execFileSync instead of execSync for HTTP');
+    assert.ok(!/execSync\([^)]*['"]\s*curl /.test(src), 'execSync with inline curl string is forbidden');
+    assert.ok(!/execFileSync\s*\(\s*['"]curl/.test(src), 'execFileSync(curl,...) replaced by fetch() — do not reintroduce');
+    // native fetch() is the mandated approach for hub HTTP calls.
+    assert.ok(/fetch\s*\(/.test(src), 'signals.js must use native fetch() for hub HTTP calls');
   });
 });
