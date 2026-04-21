@@ -8,7 +8,7 @@
 
 ![Evolver Cover](assets/cover.png)
 
-**[evomap.ai](https://evomap.ai)** | [ドキュメント](https://evomap.ai/wiki) | [English](README.md) | [中文文档](README.zh-CN.md) | [GitHub](https://github.com/EvoMap/evolver) | [リリース](https://github.com/EvoMap/evolver/releases)
+**[evomap.ai](https://evomap.ai)** | [ドキュメント](https://evomap.ai/wiki) | [English](README.md) | [中文文档](README.zh-CN.md) | [한국어 문서](README.ko-KR.md) | [GitHub](https://github.com/EvoMap/evolver) | [リリース](https://github.com/EvoMap/evolver/releases)
 
 ---
 
