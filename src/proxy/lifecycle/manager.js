@@ -43,6 +43,8 @@ class LifecycleManager {
     this._startedAt = null;
     this._consecutiveFailures = 0;
     this._reauthInProgress = false;
+    this._helloRateLimitUntil = 0;
+    this._reauthBackoffUntil = 0;
   }
 
   get nodeId() {
@@ -63,6 +65,12 @@ class LifecycleManager {
 
   async hello({ rotateSecret = false } = {}) {
     if (!this.hubUrl) return { ok: false, error: 'no_hub_url' };
+
+    if (this._helloRateLimitUntil > Date.now()) {
+      const waitSec = Math.ceil((this._helloRateLimitUntil - Date.now()) / 1000);
+      this.logger.warn(`[lifecycle] hello suppressed: rate limited for ${waitSec}s`);
+      return { ok: false, error: 'hello_rate_limit_active', waitSec };
+    }
 
     const endpoint = `${this.hubUrl}/a2a/hello`;
     const nodeId = this.store.getState('node_id') || `node_${crypto.randomBytes(6).toString('hex')}`;
@@ -90,6 +98,19 @@ class LifecycleManager {
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(HELLO_TIMEOUT),
       });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData?.error || `http_${res.status}`;
+        if (res.status === 429) {
+          const retryAfter = parseInt(res.headers.get('retry-after') || '3600', 10);
+          this._helloRateLimitUntil = Date.now() + retryAfter * 1000;
+          this.logger.error(`[lifecycle] hello rate limited (429): retry after ${retryAfter}s`);
+          return { ok: false, error: 'hello_rate_limited', retryAfter };
+        }
+        this.logger.error(`[lifecycle] hello HTTP ${res.status}: ${errMsg}`);
+        return { ok: false, error: errMsg, statusCode: res.status };
+      }
+
       const data = await res.json();
 
       if (data?.payload?.status === 'rejected') {
@@ -118,6 +139,11 @@ class LifecycleManager {
    */
   async reAuthenticate() {
     if (this._reauthInProgress) return false;
+    if (this._reauthBackoffUntil > Date.now()) {
+      const waitSec = Math.ceil((this._reauthBackoffUntil - Date.now()) / 1000);
+      this.logger.warn(`[lifecycle] re-auth suppressed: backoff active for ${waitSec}s`);
+      return false;
+    }
     this._reauthInProgress = true;
     try {
       for (let attempt = 1; attempt <= MAX_REAUTH_ATTEMPTS; attempt++) {
@@ -125,12 +151,16 @@ class LifecycleManager {
         const helloResult = await this.hello({ rotateSecret: true });
         if (!helloResult.ok) {
           this.logger.error(`[lifecycle] re-auth hello failed: ${helloResult.error}`);
+          // Rate limited or active rate limit window — no point retrying
+          if (helloResult.error === 'hello_rate_limited' || helloResult.error === 'hello_rate_limit_active') break;
           continue;
         }
         const newSecret = helloResult.response?.payload?.node_secret;
         if (!newSecret) {
+          // Hub acknowledged rotate but returned no secret — this is a hub-side issue,
+          // retrying immediately will not fix it and burns hello quota (#349).
           this.logger.error('[lifecycle] re-auth: hub did not return a new secret (rotate may not have taken effect)');
-          continue;
+          break;
         }
         const hbResult = await this.heartbeat({ _skipReauth: true });
         if (hbResult.ok) {
@@ -139,7 +169,8 @@ class LifecycleManager {
         }
         this.logger.warn(`[lifecycle] re-auth attempt ${attempt}: heartbeat still failing after rotate`);
       }
-      this.logger.error('[lifecycle] re-auth exhausted all attempts');
+      this.logger.error('[lifecycle] re-auth exhausted all attempts, backing off for 30 minutes');
+      this._reauthBackoffUntil = Date.now() + 30 * 60_000;
       return false;
     } finally {
       this._reauthInProgress = false;
