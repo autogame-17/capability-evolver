@@ -7,17 +7,20 @@ let _cachedRepoRoot = null;
 //
 // Precedence:
 //   1. EVOLVER_REPO_ROOT (explicit override, always wins)
-//   2. evolver's own directory if it has a .git
-//   3. Nearest ancestor directory that has a .git (the "host" workspace)
-//      - On by default since 1.69.6. This matches how most users install
-//        evolver (as an npm dependency or a skill under another repo):
-//        the Hand Agent writes files in the host workspace, not inside the
-//        evolver package, so git diff MUST run against the host repo.
-//      - To opt out (keep the 1.69.5 and earlier behavior of ignoring the
-//        parent git), set EVOLVER_NO_PARENT_GIT=true. The older
-//        EVOLVER_USE_PARENT_GIT=true flag is still honored for forward
-//        compatibility but is no longer required.
-//   4. Fall back to evolver's own directory.
+//   2. Nearest ancestor of process.cwd() that has a .git
+//      (user ran evolver from inside their project)
+//   3. Nearest ancestor of evolver's own directory that has a .git
+//      (local npm install: evolver is inside the project's node_modules)
+//   4. evolver's own directory if it has a .git (dev mode fallback)
+//   5. Fall back to evolver's own directory.
+//
+//   CWD is checked first because the user's intent is almost always to
+//   evolve the project they're standing in, not evolver itself.  evolver
+//   self-evolution happens naturally when CWD *is* the evolver repo.
+//
+//   To opt out, set EVOLVER_NO_PARENT_GIT=true.  The older
+//   EVOLVER_USE_PARENT_GIT=true flag is still honored for forward
+//   compatibility but is no longer required.
 function getRepoRoot() {
   if (_cachedRepoRoot) return _cachedRepoRoot;
 
@@ -28,38 +31,46 @@ function getRepoRoot() {
 
   const ownDir = path.resolve(__dirname, '..', '..');
 
-  if (fs.existsSync(path.join(ownDir, '.git'))) {
-    _cachedRepoRoot = ownDir;
-    return _cachedRepoRoot;
-  }
-
   const noParent = String(process.env.EVOLVER_NO_PARENT_GIT || '').toLowerCase() === 'true';
   // Older flag kept for backward compatibility. Setting it to 'false'
   // explicitly is treated as an opt-out, mirroring EVOLVER_NO_PARENT_GIT.
   const legacyFlag = process.env.EVOLVER_USE_PARENT_GIT;
   const legacyOptOut = typeof legacyFlag === 'string' && legacyFlag.toLowerCase() === 'false';
 
-  let dir = path.dirname(ownDir);
-  while (dir !== path.dirname(dir)) {
-    if (fs.existsSync(path.join(dir, '.git'))) {
-      if (noParent || legacyOptOut) {
+  // Walk upward from process.cwd() — the project the user is standing in.
+  if (!noParent && !legacyOptOut) {
+    let cwd = process.cwd();
+    while (cwd !== path.dirname(cwd)) {
+      if (fs.existsSync(path.join(cwd, '.git'))) {
         if (!process.env.EVOLVER_QUIET_PARENT_GIT) {
-          console.warn(
-            '[evolver] Detected .git in parent directory', dir,
-            '-- ignoring because EVOLVER_NO_PARENT_GIT is set.',
-            'Unset it (or set EVOLVER_REPO_ROOT) if evolution stalls with hollow_commit errors.'
-          );
+          console.log('[evolver] Using host git repository at:', cwd);
         }
-        _cachedRepoRoot = ownDir;
+        _cachedRepoRoot = cwd;
         return _cachedRepoRoot;
       }
-      if (!process.env.EVOLVER_QUIET_PARENT_GIT) {
-        console.log('[evolver] Using host git repository at:', dir);
-      }
-      _cachedRepoRoot = dir;
-      return _cachedRepoRoot;
+      cwd = path.dirname(cwd);
     }
-    dir = path.dirname(dir);
+  }
+
+  // Walk upward from ownDir's parent (local install inside node_modules).
+  if (!noParent && !legacyOptOut) {
+    let dir = path.dirname(ownDir);
+    while (dir !== path.dirname(dir)) {
+      if (fs.existsSync(path.join(dir, '.git'))) {
+        if (!process.env.EVOLVER_QUIET_PARENT_GIT) {
+          console.log('[evolver] Using host git repository at:', dir);
+        }
+        _cachedRepoRoot = dir;
+        return _cachedRepoRoot;
+      }
+      dir = path.dirname(dir);
+    }
+  }
+
+  // Fallback: evolver's own directory (dev mode or isolated install).
+  if (fs.existsSync(path.join(ownDir, '.git'))) {
+    _cachedRepoRoot = ownDir;
+    return _cachedRepoRoot;
   }
 
   _cachedRepoRoot = ownDir;

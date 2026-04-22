@@ -42,14 +42,52 @@ describe('getRepoRoot', () => {
     assert.equal(getRepoRoot(), tmpDir);
   });
 
-  it('returns own directory when it has .git', () => {
+  // When CWD is inside the evolver repo itself (e.g. running tests),
+  // the CWD walk finds the same .git as ownDir — both resolve to the
+  // evolver repo.
+  it('returns own directory when CWD is inside the evolver repo', () => {
     const ownDir = path.resolve(__dirname, '..');
     const { getRepoRoot } = freshRequire('../src/gep/paths');
     delete process.env.EVOLVER_REPO_ROOT;
     const result = getRepoRoot();
     assert.ok(typeof result === 'string' && result.length > 0);
-    // evolver repo itself is a git repo during test, so we stop at ownDir
     assert.equal(result, ownDir);
+  });
+
+  // CWD git repo takes precedence over evolver's own .git (the fix for
+  // global installs where evolver happens to have .git but the user ran
+  // it from a different project).
+  it('prefers CWD git repo over evolver own .git', () => {
+    // Simulate a global install that has .git (e.g. npm install from git).
+    const globalDir = fs.mkdtempSync(path.join(os.tmpdir(), 'global-pkg-'));
+    fs.mkdirSync(path.join(globalDir, '.git'));
+    const fakeGepDir = path.join(globalDir, 'src', 'gep');
+    fs.mkdirSync(fakeGepDir, { recursive: true });
+    const pathsSrc = fs.readFileSync(
+      path.resolve(__dirname, '..', 'src', 'gep', 'paths.js'),
+      'utf8'
+    );
+    fs.writeFileSync(path.join(fakeGepDir, 'paths.js'), pathsSrc);
+
+    // Create a separate user project with .git.
+    const projectDir = fs.mkdtempSync(path.join(os.tmpdir(), 'project-'));
+    fs.mkdirSync(path.join(projectDir, '.git'));
+
+    const resolved = require.resolve(path.join(fakeGepDir, 'paths.js'));
+    delete require.cache[resolved];
+    const mod = require(resolved);
+
+    const origCwd = process.cwd;
+    process.cwd = () => projectDir;
+    try {
+      // CWD project should win over evolver's own .git.
+      assert.equal(mod.getRepoRoot(), projectDir);
+    } finally {
+      process.cwd = origCwd;
+      delete require.cache[resolved];
+      fs.rmSync(globalDir, { recursive: true, force: true });
+      fs.rmSync(projectDir, { recursive: true, force: true });
+    }
   });
 
   it('EVOLVER_REPO_ROOT takes precedence over .git detection', () => {
@@ -78,11 +116,19 @@ describe('getRepoRoot', () => {
 
     const resolved = require.resolve(path.join(fakeGepDir, 'paths.js'));
     delete require.cache[resolved];
-    const { getRepoRoot } = require(resolved);
-    assert.equal(getRepoRoot(), host);
+    const mod = require(resolved);
 
-    delete require.cache[resolved];
-    fs.rmSync(host, { recursive: true, force: true });
+    // The CWD walk must also point inside the host tree so it doesn't
+    // find the real evolver repo on disk before the ownDir walk runs.
+    const origCwd = process.cwd;
+    process.cwd = () => path.join(host, 'node_modules', '@evomap', 'evolver');
+    try {
+      assert.equal(mod.getRepoRoot(), host);
+    } finally {
+      process.cwd = origCwd;
+      delete require.cache[resolved];
+      fs.rmSync(host, { recursive: true, force: true });
+    }
   });
 
   it('respects EVOLVER_NO_PARENT_GIT=true as opt-out', () => {
