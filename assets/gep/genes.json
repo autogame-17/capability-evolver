@@ -108,6 +108,43 @@
     },
     {
       "type": "Gene",
+      "id": "gene_gep_optimize_tool_usage",
+      "summary": "Optimize tool execution patterns by reducing redundant exec calls, improving tool selection strategy, and enforcing tool-use constraints to prevent bypass.",
+      "category": "optimize",
+      "signals_match": [
+        "high_tool_usage:exec",
+        "repeated_tool_usage:exec",
+        "tool_bypass",
+        "tool_loop",
+        "high_tool_usage"
+      ],
+      "preconditions": [
+        "agent repeatedly invokes the same tool (especially exec) without progress",
+        "tool execution bypass patterns detected",
+        "no active error signals (errors would take repair priority)"
+      ],
+      "strategy": [
+        "Analyze tool usage patterns to identify the root cause of repetition (wrong tool, missing context, or lack of guardrails)",
+        "Introduce strategy-level guardrails: prefer single-shot commands, batch related operations, add explicit retry limits",
+        "If tool_bypass detected, strengthen constraint enforcement in prompt assembly or tool routing",
+        "Estimate blast radius; changes should target tool routing, prompt constraints, or signal deduplication logic",
+        "Validate by confirming no regressions in existing tool tests and signal extraction accuracy",
+        "Solidify: record EvolutionEvent with intent=optimize, update Capsule on success"
+      ],
+      "constraints": {
+        "max_files": 15,
+        "forbidden_paths": [
+          ".git",
+          "node_modules"
+        ]
+      },
+      "validation": [
+        "node scripts/validate-modules.js ./src/gep/signals ./src/evolve",
+        "node scripts/validate-suite.js"
+      ]
+    },
+    {
+      "type": "Gene",
       "id": "gene_distilled_s2g-env-vars",
       "summary": "Vercel environment variable expert guidance. Use when working with .env files, vercel env commands, OIDC tokens, or managing environment-specific configuration.",
       "category": "optimize",
