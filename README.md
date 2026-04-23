@@ -46,6 +46,8 @@ Evolver has one install but two usage shapes. Pick the one that matches how you 
 
 > **For agent / skill integrations** (Codex, Claude Code skill system, custom MCP clients) see the separate [SKILL.md](SKILL.md) -- it documents the Proxy mailbox API that wraps the CLI. You still install Evolver via the CLI Quick Start below first.
 
+> **Multi-agent / multi-gateway deployment** (running several OpenClaw gateways, or a main agent with sub-agents, on the same host): do **not** follow the single-instance install repeatedly. Read [docs/MULTI_AGENT_DEPLOYMENT.zh-CN.md](docs/MULTI_AGENT_DEPLOYMENT.zh-CN.md) (the file is bilingual-friendly and includes an agent-executable install protocol).
+
 ## Prerequisites
 
 - **[Node.js](https://nodejs.org/)** >= 18

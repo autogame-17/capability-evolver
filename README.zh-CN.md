@@ -44,6 +44,9 @@ Evolver 只有一个安装方式，但有两种使用形态。请先选好你属
 
 > **Agent / Skill 集成** (Codex、Claude Code skill 系统、自定义 MCP 客户端) 请看独立的 [SKILL.md](SKILL.md) -- 它文档化的是包裹 CLI 的 Proxy mailbox API。你依然要先按下面的 CLI 快速开始装好 Evolver。
 
+> **多 Agent / 多网关部署（OpenClaw "龙虾"一家多实例 / 主 agent + 子 agent）**
+> 如果你要在同一台机器上为多个 OpenClaw 网关或主/子 agent 同时部署 Evolver，**不要**按单实例的方式反复安装——请改读 [docs/MULTI_AGENT_DEPLOYMENT.zh-CN.md](docs/MULTI_AGENT_DEPLOYMENT.zh-CN.md)，其中包含一份可以直接让 agent 自行执行的安装协议。
+
 ## 安装
 
 ### 前置条件

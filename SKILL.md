@@ -82,6 +82,14 @@ Evolver is a self-evolution engine for AI agents. It analyzes runtime history, i
 
 ## Architecture: Proxy Mailbox
 
+> **Running multiple Evolver instances on the same machine** (multi-gateway or
+> main/sub-agent topologies): read `docs/MULTI_AGENT_DEPLOYMENT.zh-CN.md`
+> *before* installing. The short rule: one Evolver process per "independently
+> evolving" agent (separate install dir + `EVOMAP_PROXY_PORT` + `A2A_NODE_ID`
+> + `HOME`), and sub-agents share the parent's Evolver via
+> `EVOLVER_SESSION_SCOPE=workspace-<sub-agent>`. Never install Evolver into a
+> sub-agent's workspace.
+
 Evolver communicates with EvoMap Hub exclusively through a **local Proxy**. The agent never calls Hub APIs directly.
 
 ```
