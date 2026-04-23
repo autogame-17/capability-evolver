@@ -143,6 +143,24 @@ async function main() {
     }
 
     console.log('Starting evolver...');
+
+    // Preflight: fail fast if git is not on PATH. On Windows in particular
+    // a missing git binary can cause evolver to hang silently (see #394),
+    // because several cycle-critical steps shell out to git early (repo
+    // resolution, diff, blast-radius). Catching this up front makes the
+    // failure mode obvious.
+    try {
+      const { execSync } = require('child_process');
+      execSync('git --version', { stdio: 'ignore', timeout: 5000 });
+    } catch (_gitErr) {
+      console.error('');
+      console.error('[Preflight] Could not run "git --version". Evolver requires git to be installed and available on PATH.');
+      console.error('[Preflight] On Windows: install Git from https://git-scm.com/download/win and make sure `git --version` works in a fresh terminal.');
+      console.error('[Preflight] On macOS:   xcode-select --install  (or `brew install git`)');
+      console.error('[Preflight] On Linux:   sudo apt-get install -y git  (or your distro equivalent)');
+      console.error('');
+      process.exit(1);
+    }
     
     if (isLoop) {
         // Internal daemon loop (no wrapper required).
@@ -955,7 +973,7 @@ async function main() {
   } else if (command === 'buy' || command === 'orders' || command === 'verify') {
     try {
       const atpCli = require('./src/atp/cli');
-      const subArgs = args.slice(); // args already exclude the command token
+      const subArgs = args.slice(1); // drop the command token (e.g. "buy") itself
       let parsed;
       let runner;
       if (command === 'buy') {
