@@ -78,7 +78,8 @@
         "perf_bottleneck",
         "capability_gap",
         "stable_success_plateau",
-        "external_opportunity"
+        "external_opportunity",
+        "bounty_task"
       ],
       "preconditions": [
         "at least one opportunity signal is present",
