@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { getGepAssetsDir } = require('./paths');
 const { computeAssetId, SCHEMA_VERSION } = require('./contentHash');
+const { rotateIfNeeded } = require('./logRotation');
 
 function ensureDir(dir) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
@@ -260,16 +261,19 @@ function readAllEvents() {
 
 function appendEventJsonl(eventObj) {
   const dir = getGepAssetsDir(); ensureDir(dir);
+  rotateIfNeeded(eventsPath());
   fs.appendFileSync(eventsPath(), JSON.stringify(eventObj) + '\n', 'utf8');
 }
 
 function appendCandidateJsonl(candidateObj) {
   const dir = getGepAssetsDir(); ensureDir(dir);
+  rotateIfNeeded(candidatesPath());
   fs.appendFileSync(candidatesPath(), JSON.stringify(candidateObj) + '\n', 'utf8');
 }
 
 function appendExternalCandidateJsonl(obj) {
   const dir = getGepAssetsDir(); ensureDir(dir);
+  rotateIfNeeded(externalCandidatesPath());
   fs.appendFileSync(externalCandidatesPath(), JSON.stringify(obj) + '\n', 'utf8');
 }
 

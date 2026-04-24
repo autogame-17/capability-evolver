@@ -1,0 +1,41 @@
+name: Release Check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  release-check:
+    name: Release integrity gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify integrity signature
+        run: |
+          if [ -f integrity.sig ]; then
+            node scripts/verify-integrity.js
+          else
+            echo "::warning::integrity.sig not found — skipping signature check (expected on non-release branches)"
+          fi
+
+      - name: Check for obfuscated file drift
+        run: |
+          if [ -f scripts/check-obfuscation-drift.js ]; then
+            node scripts/check-obfuscation-drift.js
+          fi
+
+      - name: Validate all modules
+        run: node scripts/validate-suite.js

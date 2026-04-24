@@ -132,7 +132,8 @@ const LEAK_CHECK_MODE = envStr('EVOLVER_LEAK_CHECK', 'strict');
 
 const VALIDATOR_ENABLED = (function () {
   const v = String(process.env.EVOLVER_VALIDATOR_ENABLED || '').toLowerCase().trim();
-  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+  if (!v) return true; // unset → ON (opt-out model, matches validator/index.js)
+  return v !== '0' && v !== 'false' && v !== 'no' && v !== 'off';
 })();
 const VALIDATOR_STAKE_AMOUNT = envInt('EVOLVER_VALIDATOR_STAKE_AMOUNT', 100);
 const VALIDATOR_MAX_TASKS_PER_CYCLE = envInt('EVOLVER_VALIDATOR_MAX_TASKS_PER_CYCLE', 2);
@@ -141,6 +142,33 @@ const VALIDATOR_REPORT_TIMEOUT_MS = envInt('EVOLVER_VALIDATOR_REPORT_TIMEOUT_MS'
 const VALIDATOR_STAKE_TIMEOUT_MS = envInt('EVOLVER_VALIDATOR_STAKE_TIMEOUT_MS', 10000);
 const VALIDATOR_CMD_TIMEOUT_MS = envInt('EVOLVER_VALIDATOR_CMD_TIMEOUT_MS', 60000);
 const VALIDATOR_BATCH_TIMEOUT_MS = envInt('EVOLVER_VALIDATOR_BATCH_TIMEOUT_MS', 180000);
+
+// Validate critical config values at startup. Throws on misconfigured envvars
+// so failures surface immediately rather than causing silent wrong behavior.
+function validateConfig() {
+  const errors = [];
+  const scores = [
+    ['EVOLVER_MIN_PUBLISH_SCORE', MIN_PUBLISH_SCORE],
+    ['EVOLVER_GENE_BAN_BEST_THRESHOLD', GENE_BAN_BEST_THRESHOLD],
+    ['EVOLVER_SELF_PR_MIN_SCORE', SELF_PR_MIN_SCORE],
+  ];
+  for (const [key, val] of scores) {
+    if (val < 0 || val > 1) errors.push(key + ' must be 0–1, got ' + val);
+  }
+  const timeouts = [
+    ['EVOLVER_HELLO_TIMEOUT_MS', HELLO_TIMEOUT_MS],
+    ['EVOLVER_HEARTBEAT_TIMEOUT_MS', HEARTBEAT_TIMEOUT_MS],
+    ['EVOLVER_VALIDATION_TIMEOUT_MS', VALIDATION_TIMEOUT_MS],
+    ['EVOLVER_VALIDATOR_CMD_TIMEOUT_MS', VALIDATOR_CMD_TIMEOUT_MS],
+    ['EVOLVER_VALIDATOR_BATCH_TIMEOUT_MS', VALIDATOR_BATCH_TIMEOUT_MS],
+  ];
+  for (const [key, val] of timeouts) {
+    if (!Number.isFinite(val) || val <= 0) errors.push(key + ' must be > 0, got ' + val);
+  }
+  if (errors.length > 0) {
+    throw new Error('[config] Invalid configuration:\n  ' + errors.join('\n  '));
+  }
+}
 
 module.exports = {
   // Network
@@ -212,4 +240,5 @@ module.exports = {
   envInt,
   envFloat,
   envStr,
+  validateConfig,
 };

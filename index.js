@@ -716,7 +716,7 @@ async function main() {
       console.log('\n[Review] Rejected. Rolling back changes...');
       try {
         execSync('git checkout -- .', { cwd: repoRoot, encoding: 'utf8', timeout: 30000, maxBuffer: MAX_EXEC_BUFFER });
-        execSync('git clean -fd', { cwd: repoRoot, encoding: 'utf8', timeout: 30000, maxBuffer: MAX_EXEC_BUFFER });
+        execSync('git clean -fd -e node_modules -e workspace -e .env -e ".env.*" -e "*.pid"', { cwd: repoRoot, encoding: 'utf8', timeout: 30000, maxBuffer: MAX_EXEC_BUFFER });
         const evolDir = getEvolutionDir();
         const sp = path.join(evolDir, 'evolution_solidify_state.json');
         if (fs.existsSync(sp)) {
@@ -866,10 +866,22 @@ async function main() {
         fs.writeFileSync(path.join(outDir, 'SKILL.md'), data.content, 'utf8');
       }
 
+      const ALLOWED_SKILL_EXTENSIONS = new Set(['.js', '.mjs', '.cjs', '.ts', '.json', '.md', '.txt', '.sh', '.py', '.yml', '.yaml']);
+      const MAX_SKILL_FILE_BYTES = 512 * 1024;
+
       const bundled = Array.isArray(data.bundled_files) ? data.bundled_files : [];
       for (const file of bundled) {
         if (!file || !file.name || typeof file.content !== 'string') continue;
         const safeName = path.basename(file.name);
+        const ext = path.extname(safeName).toLowerCase();
+        if (!ALLOWED_SKILL_EXTENSIONS.has(ext)) {
+          console.warn('[fetch] Skipped skill file with disallowed extension: ' + safeName);
+          continue;
+        }
+        if (Buffer.byteLength(file.content, 'utf8') > MAX_SKILL_FILE_BYTES) {
+          console.warn('[fetch] Skipped skill file exceeding size limit: ' + safeName);
+          continue;
+        }
         fs.writeFileSync(path.join(outDir, safeName), file.content, 'utf8');
       }
 
