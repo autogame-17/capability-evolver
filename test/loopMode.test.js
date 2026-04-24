@@ -142,7 +142,7 @@ describe('loop-mode non-fatal error handling', () => {
       A2A_HUB_URL: '',
       EVOLVER_REPO_ROOT: repoRoot,
       // Force immediate exit after first cycle for test predictability
-      EVOLVER_MAX_CYCLES: '1',
+      EVOLVER_MAX_CYCLES_PER_PROCESS: '1',
     };
     try {
       const out = execFileSync(process.execPath, ['index.js'], {
@@ -186,7 +186,7 @@ describe('loop-mode non-fatal error handling', () => {
           OMLS_ENABLED: 'true',
           A2A_HUB_URL: '',
           EVOLVER_REPO_ROOT: repoRoot,
-          EVOLVER_MAX_CYCLES: '1',
+          EVOLVER_MAX_CYCLES_PER_PROCESS: '1',
         },
       });
     } catch (err) {
