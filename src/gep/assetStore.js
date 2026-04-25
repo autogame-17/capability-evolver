@@ -186,7 +186,7 @@ function loadGenes() {
           try {
             const parsed = JSON.parse(line);
             if (parsed && parsed.type === 'Gene') jsonlGenes.push(parsed);
-          } catch(e) {}
+          } catch(e) { if (process.env.DEBUG) process.stderr.write("assetStore: malformed JSONL line: " + e.message + "\n"); }
         }
       });
     }
@@ -212,7 +212,7 @@ function loadCapsules() {
       const raw = fs.readFileSync(p, 'utf8');
       raw.split('\n').forEach(line => {
         if (line.trim()) {
-            try { jsonlCapsules.push(JSON.parse(line)); } catch(e) {}
+            try { jsonlCapsules.push(JSON.parse(line)); } catch(e) { if (process.env.DEBUG) process.stderr.write("assetStore: malformed JSONL line: " + e.message + "\n"); }
         }
       });
     }

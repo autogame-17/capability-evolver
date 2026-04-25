@@ -56,7 +56,7 @@ function lowerConfidence(asset, opts) {
   cloned.a2a.received_at = receivedAt;
   cloned.a2a.confidence_factor = factor;
   if (!cloned.schema_version) cloned.schema_version = SCHEMA_VERSION;
-  if (!cloned.asset_id) { try { cloned.asset_id = computeAssetId(cloned); } catch (e) {} }
+  if (!cloned.asset_id) { try { cloned.asset_id = computeAssetId(cloned); } catch (e) { if (process.env.DEBUG) process.stderr.write('a2a: computeAssetId failed: ' + e.message + '\n'); } }
   return cloned;
 }
 
@@ -107,7 +107,7 @@ function exportEligibleCapsules(params) {
   for (var i = 0; i < eligible.length; i++) {
     var c = eligible[i];
     if (!c.schema_version) c.schema_version = SCHEMA_VERSION;
-    if (!c.asset_id) { try { c.asset_id = computeAssetId(c); } catch (e) {} }
+    if (!c.asset_id) { try { c.asset_id = computeAssetId(c); } catch (e) { if (process.env.DEBUG) process.stderr.write('a2a: computeAssetId failed for capsule: ' + e.message + '\n'); } }
   }
   return eligible;
 }
@@ -127,7 +127,7 @@ function exportEligibleGenes(params) {
   for (var i = 0; i < eligible.length; i++) {
     var g = eligible[i];
     if (!g.schema_version) g.schema_version = SCHEMA_VERSION;
-    if (!g.asset_id) { try { g.asset_id = computeAssetId(g); } catch (e) {} }
+    if (!g.asset_id) { try { g.asset_id = computeAssetId(g); } catch (e) { if (process.env.DEBUG) process.stderr.write('a2a: computeAssetId failed for gene: ' + e.message + '\n'); } }
   }
   return eligible;
 }
