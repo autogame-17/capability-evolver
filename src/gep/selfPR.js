@@ -102,7 +102,7 @@ function writeState(state) {
     const dir = getEvolutionDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(getStatePath(), JSON.stringify(state, null, 2) + '\n');
-  } catch (_) {}
+  } catch (e) { console.warn('[SelfPR] Failed to save state:', e.message); }
 }
 
 function isInCooldown() {
@@ -225,7 +225,7 @@ function getGitDiff(changedFiles, repoRoot) {
         { cwd: repoRoot, timeout: 10000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: MAX_EXEC_BUFFER }
       );
       if (result && result.trim()) parts.push(result.trim());
-    } catch (_) {}
+    } catch (e) { console.warn('[SelfPR] Summary method failed:', e.message); }
     if (parts.length === before) {
       try {
         const result = execSync(
@@ -233,7 +233,7 @@ function getGitDiff(changedFiles, repoRoot) {
           { cwd: repoRoot, timeout: 10000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: MAX_EXEC_BUFFER }
         );
         if (result && result.trim()) parts.push(result.trim());
-      } catch (_) {}
+      } catch (e) { console.warn('[SelfPR] Fallback summary failed:', e.message); }
     }
   }
   return parts.join('\n');
