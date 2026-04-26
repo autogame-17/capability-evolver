@@ -1,6 +1,6 @@
 // Usage: node scripts/validate-suite.js [test-glob-pattern]
 // Runs the evolver test suite -- repo root is derived from script location, no shell glob needed.
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
@@ -8,10 +8,22 @@ const EVOLVER_REPO_ROOT = path.join(__dirname, '..');
 const pattern = process.argv[2] || 'test/*.test.js';
 
 function expandTestGlob(repoRoot, pat) {
-  const dir = pat.replace(/\/\*\.test\.js$/, '');
+  const fullPattern = path.isAbsolute(pat) ? pat : path.join(repoRoot, pat);
+  if (fs.existsSync(fullPattern) && fs.statSync(fullPattern).isFile()) {
+    return fullPattern.endsWith('.test.js') ? [fullPattern] : [];
+  }
+
+  const dir = path.dirname(pat);
+  const basenamePattern = path.basename(pat);
   const fullDir = path.isAbsolute(dir) ? dir : path.join(repoRoot, dir);
+  if (!fs.existsSync(fullDir) || !fs.statSync(fullDir).isDirectory()) return [];
+
+  const escaped = basenamePattern
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*');
+  const matcher = new RegExp('^' + escaped + '$');
   return fs.readdirSync(fullDir)
-    .filter(f => f.endsWith('.test.js'))
+    .filter(f => f.endsWith('.test.js') && matcher.test(f))
     .map(f => path.join(fullDir, f))
     .sort();
 }
@@ -22,7 +34,6 @@ if (files.length === 0) {
   process.exit(1);
 }
 
-const cmd = 'node --test ' + files.join(' ');
 const env = Object.assign({}, process.env, {
   NODE_ENV: 'test',
   EVOLVER_REPO_ROOT,
@@ -30,9 +41,10 @@ const env = Object.assign({}, process.env, {
 });
 delete env.EVOLVE_BRIDGE;
 delete env.OPENCLAW_WORKSPACE;
+delete env.NODE_TEST_CONTEXT;
 
 try {
-  const output = execSync(cmd, {
+  const output = execFileSync(process.execPath, ['--test', ...files], {
     cwd: EVOLVER_REPO_ROOT,
     stdio: ['pipe', 'pipe', 'pipe'],
     timeout: 180000,
