@@ -302,7 +302,7 @@ class LifecycleManager {
   }
 
   _shouldUpgrade(minVersion) {
-    const parse = (v) => String(v || '0.0.0').split('.').map(Number);
+    const parse = (v) => String(v || '0.0.0').split('.').map(part => parseInt(part, 10));
     const min = parse(minVersion);
     const cur = parse(PROXY_PROTOCOL_VERSION);
     for (let i = 0; i < 3; i++) {

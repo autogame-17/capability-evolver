@@ -121,3 +121,11 @@ test('lifecycle reAuthenticate: breaks on hello_rate_limited without retrying', 
     global.fetch = originalFetch;
   }
 });
+
+test('lifecycle _shouldUpgrade: handles prerelease minimum versions', () => {
+  const mgr = new LifecycleManager({ hubUrl: 'https://example.test', store: makeStore(), logger: silentLogger() });
+
+  assert.strictEqual(mgr._shouldUpgrade('0.1.0-beta.1'), false);
+  assert.strictEqual(mgr._shouldUpgrade('0.1.1-beta.1'), true);
+  assert.strictEqual(mgr._shouldUpgrade('0.2.0-beta.1'), true);
+});
