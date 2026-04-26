@@ -210,6 +210,8 @@ class MailboxStore {
 
   writeInbound({ id, type, payload, channel, priority, refId, expiresAt }) {
     const msgId = id || generateUUIDv7();
+    if (this._messages.has(msgId)) return msgId;
+
     const now = Date.now();
     const msg = {
       id: msgId,

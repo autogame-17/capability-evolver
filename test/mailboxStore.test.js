@@ -99,6 +99,19 @@ describe('MailboxStore', () => {
       const id = store.writeInbound({ id: customId, type: 'hub_event', payload: {} });
       assert.equal(id, customId);
     });
+
+    it('ignores duplicate inbound ids', () => {
+      const store2 = new MailboxStore(tmpDataDir());
+      const customId = generateUUIDv7();
+
+      store2.writeInbound({ id: customId, type: 'hub_event', payload: { n: 1 } });
+      const duplicateId = store2.writeInbound({ id: customId, type: 'hub_event', payload: { n: 2 } });
+
+      assert.equal(duplicateId, customId);
+      assert.equal(store2.countPending({ direction: 'inbound' }), 1);
+      assert.deepEqual(store2.poll({ type: 'hub_event' }).map(m => m.payload), [{ n: 1 }]);
+      store2.close();
+    });
   });
 
   describe('writeInboundBatch()', () => {
