@@ -5,8 +5,17 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 
-const { parseCommand, assertNodeCommandSafe, ALLOWED_EXECUTABLES, BLOCKED_NODE_FLAGS } = require('../src/gep/validator/sandboxExecutor');
+const {
+  parseCommand,
+  assertNodeCommandSafe,
+  assertScriptPathSafe,
+  ALLOWED_EXECUTABLES,
+  BLOCKED_NODE_FLAGS,
+} = require('../src/gep/validator/sandboxExecutor');
 
 test('parseCommand splits a simple command', () => {
   const r = parseCommand('node index.js');
@@ -123,4 +132,39 @@ test('assertNodeCommandSafe accepts well-formed node invocations', () => {
   assert.doesNotThrow(() => assertNodeCommandSafe({ executable: 'node', args: ['index.js'] }));
   assert.doesNotThrow(() => assertNodeCommandSafe({ executable: 'node', args: ['--no-warnings', 'index.js'] }));
   assert.doesNotThrow(() => assertNodeCommandSafe({ executable: 'node', args: ['scripts/validate-suite.js', '--quiet'] }));
+});
+
+test('assertScriptPathSafe rejects absolute and escaping paths', () => {
+  const sandboxDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sandbox-executor-test-'));
+  try {
+    const inSandbox = path.join(sandboxDir, 'ok.js');
+    fs.writeFileSync(inSandbox, 'console.log("ok")\n', 'utf8');
+    assert.doesNotThrow(() => assertScriptPathSafe({ executable: 'node', args: ['ok.js'] }, sandboxDir));
+
+    const parentEscape = path.join('..', 'escape.js');
+    assert.throws(
+      () => assertScriptPathSafe({ executable: 'node', args: [parentEscape] }, sandboxDir),
+      /escapes_sandbox/,
+    );
+
+    const absolute = path.resolve(sandboxDir, 'ok.js');
+    assert.throws(
+      () => assertScriptPathSafe({ executable: 'node', args: [absolute] }, sandboxDir),
+      /absolute_script_path_not_allowed/,
+    );
+  } finally {
+    try { fs.rmSync(sandboxDir, { recursive: true, force: true }); } catch {}
+  }
+});
+
+test('assertScriptPathSafe rejects missing script files', () => {
+  const sandboxDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sandbox-executor-test-'));
+  try {
+    assert.throws(
+      () => assertScriptPathSafe({ executable: 'node', args: ['missing.js'] }, sandboxDir),
+      /script_not_found_in_sandbox/,
+    );
+  } finally {
+    try { fs.rmSync(sandboxDir, { recursive: true, force: true }); } catch {}
+  }
 });

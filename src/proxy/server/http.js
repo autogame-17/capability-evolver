@@ -1,7 +1,7 @@
 'use strict';
 
 const http = require('http');
-const { writeSettings, readSettings, clearSettings, clearIfStale } = require('./settings');
+const { writeSettings, clearSettings, clearIfStale, createProxyAuthToken } = require('./settings');
 
 const MAX_PORT_ATTEMPTS = 100;
 const DEFAULT_PORT = 19820;
@@ -89,6 +89,8 @@ class ProxyHttpServer {
     this.actualPort = null;
     this.logger = logger || console;
     this.server = null;
+    this.requireAuth = String(process.env.EVOMAP_PROXY_REQUIRE_AUTH || 'true').toLowerCase() !== 'false';
+    this.authToken = createProxyAuthToken();
   }
 
   async start() {
@@ -106,6 +108,7 @@ class ProxyHttpServer {
             url,
             pid: process.pid,
             started_at: new Date().toISOString(),
+            auth_token: this.authToken,
           },
         });
         this.logger.log(`[proxy] HTTP server listening on ${url}`);
@@ -127,6 +130,13 @@ class ProxyHttpServer {
   async _handleRequest(req, res) {
     const url = new URL(req.url, `http://127.0.0.1:${this.actualPort}`);
     const routeKey = `${req.method} ${url.pathname}`;
+
+    if (this.requireAuth) {
+      const provided = req.headers['x-evomap-proxy-token'];
+      if (!provided || provided !== this.authToken) {
+        return sendJson(res, 401, { error: 'Unauthorized' });
+      }
+    }
 
     const paramMatch = this._matchRoute(req.method, url.pathname);
 

@@ -7,6 +7,8 @@ const crypto = require('crypto');
 const DEFAULT_CHANNEL = 'evomap-hub';
 const SCHEMA_VERSION = 1;
 const PROXY_PROTOCOL_VERSION = '0.1.0';
+const PRIVATE_FILE_MODE = 0o600;
+const PRIVATE_DIR_MODE = 0o700;
 
 // Merge `fields` into `target` while stripping keys that can mutate the
 // prototype chain. Mailbox rows are persisted as JSONL and rebuilt on
@@ -69,7 +71,10 @@ function safeParse(payload) {
 }
 
 function appendLine(filePath, obj) {
-  fs.appendFileSync(filePath, JSON.stringify(obj) + '\n', 'utf8');
+  const dir = path.dirname(filePath);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
+  fs.appendFileSync(filePath, JSON.stringify(obj) + '\n', { encoding: 'utf8', mode: PRIVATE_FILE_MODE });
+  try { fs.chmodSync(filePath, PRIVATE_FILE_MODE); } catch {}
 }
 
 function readLines(filePath) {
@@ -90,7 +95,8 @@ function readLines(filePath) {
 class MailboxStore {
   constructor(dataDir) {
     if (!dataDir) throw new Error('dataDir is required');
-    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+    if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true, mode: PRIVATE_DIR_MODE });
+    try { fs.chmodSync(dataDir, PRIVATE_DIR_MODE); } catch {}
     this.dataDir = dataDir;
 
     this._messagesFile = path.join(dataDir, 'messages.jsonl');
@@ -134,10 +140,11 @@ class MailboxStore {
 
   _persistState() {
     const dir = path.dirname(this._stateFile);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
     const tmp = `${this._stateFile}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(this._state, null, 2) + '\n', 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify(this._state, null, 2) + '\n', { encoding: 'utf8', mode: PRIVATE_FILE_MODE });
     fs.renameSync(tmp, this._stateFile);
+    try { fs.chmodSync(this._stateFile, PRIVATE_FILE_MODE); } catch {}
   }
 
   _rebuildIndex() {
