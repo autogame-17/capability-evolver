@@ -5,31 +5,43 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 
-const SETTINGS_DIR = path.join(os.homedir(), '.evolver');
-const SETTINGS_FILE = path.join(SETTINGS_DIR, 'settings.json');
+const DEFAULT_SETTINGS_DIR = path.join(os.homedir(), '.evolver');
+const SETTINGS_DIR = DEFAULT_SETTINGS_DIR;
+const SETTINGS_FILE = path.join(DEFAULT_SETTINGS_DIR, 'settings.json');
 const FILE_MODE = 0o600;
 const DIR_MODE = 0o700;
 
+function resolveSettingsDir() {
+  return process.env.EVOLVER_SETTINGS_DIR || DEFAULT_SETTINGS_DIR;
+}
+
+function resolveSettingsFile() {
+  return path.join(resolveSettingsDir(), 'settings.json');
+}
+
 function ensureSettingsDir() {
-  if (!fs.existsSync(SETTINGS_DIR)) {
-    fs.mkdirSync(SETTINGS_DIR, { recursive: true, mode: DIR_MODE });
+  const settingsDir = resolveSettingsDir();
+  if (!fs.existsSync(settingsDir)) {
+    fs.mkdirSync(settingsDir, { recursive: true, mode: DIR_MODE });
     return;
   }
-  try { fs.chmodSync(SETTINGS_DIR, DIR_MODE); } catch {}
+  try { fs.chmodSync(settingsDir, DIR_MODE); } catch {}
 }
 
 function writeSettingsFile(data) {
   ensureSettingsDir();
-  const tmp = SETTINGS_FILE + '.tmp';
+  const settingsFile = resolveSettingsFile();
+  const tmp = settingsFile + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', { encoding: 'utf8', mode: FILE_MODE });
-  fs.renameSync(tmp, SETTINGS_FILE);
-  try { fs.chmodSync(SETTINGS_FILE, FILE_MODE); } catch {}
+  fs.renameSync(tmp, settingsFile);
+  try { fs.chmodSync(settingsFile, FILE_MODE); } catch {}
 }
 
 function readSettings() {
   try {
-    if (fs.existsSync(SETTINGS_FILE)) {
-      return JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    const settingsFile = resolveSettingsFile();
+    if (fs.existsSync(settingsFile)) {
+      return JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
     }
   } catch {}
   return {};
@@ -44,7 +56,8 @@ function writeSettings(data) {
 
 function clearSettings() {
   try {
-    if (fs.existsSync(SETTINGS_FILE)) {
+    const settingsFile = resolveSettingsFile();
+    if (fs.existsSync(settingsFile)) {
       const current = readSettings();
       delete current.proxy;
       writeSettingsFile(current);
@@ -102,6 +115,8 @@ module.exports = {
   getProxyAuthToken,
   getProxyRequestHeaders,
   createProxyAuthToken,
+  resolveSettingsDir,
+  resolveSettingsFile,
   SETTINGS_DIR,
   SETTINGS_FILE,
 };

@@ -15,7 +15,9 @@ function tmpDataDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'proxy-test-'));
 }
 
-function request(url, method, body) {
+let defaultHeaders = {};
+
+function request(url, method, body, headers) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const payload = body ? JSON.stringify(body) : '';
@@ -24,10 +26,10 @@ function request(url, method, body) {
       port: u.port,
       path: u.pathname + u.search,
       method,
-      headers: {
+      headers: Object.assign({
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload),
-      },
+      }, defaultHeaders, headers || {}),
     }, (res) => {
       const chunks = [];
       res.on('data', c => chunks.push(c));
@@ -44,10 +46,12 @@ function request(url, method, body) {
 }
 
 describe('ProxyHttpServer', () => {
-  let store, server, baseUrl, dataDir;
+  let store, server, baseUrl, dataDir, settingsDir;
 
   before(async () => {
     dataDir = tmpDataDir();
+    settingsDir = tmpDataDir();
+    process.env.EVOLVER_SETTINGS_DIR = settingsDir;
     store = new MailboxStore(dataDir);
 
     const mockProxyHandlers = {
@@ -61,12 +65,24 @@ describe('ProxyHttpServer', () => {
     server = new ProxyHttpServer(routes, { port: 39820, logger: { log: () => {}, error: () => {}, warn: () => {} } });
     const info = await server.start();
     baseUrl = info.url;
+    defaultHeaders = { 'x-evomap-proxy-token': server.authToken };
   });
 
   after(async () => {
+    defaultHeaders = {};
     await server.stop();
     store.close();
+    delete process.env.EVOLVER_SETTINGS_DIR;
     try { fs.rmSync(dataDir, { recursive: true }); } catch {}
+    try { fs.rmSync(settingsDir, { recursive: true }); } catch {}
+  });
+
+  it('rejects requests without proxy auth token', async () => {
+    const res = await request(`${baseUrl}/mailbox/list?type=test`, 'GET', null, {
+      'x-evomap-proxy-token': '',
+    });
+    assert.equal(res.status, 401);
+    assert.equal(res.body.error, 'Unauthorized');
   });
 
   describe('POST /mailbox/send', () => {
