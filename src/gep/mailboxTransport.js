@@ -21,7 +21,7 @@ function _request(method, path, body) {
       {
         hostname: url.hostname,
         port: url.port,
-        path: url.pathname,
+        path: url.pathname + (url.search || ''),
         method,
         headers,
         timeout: 10_000,

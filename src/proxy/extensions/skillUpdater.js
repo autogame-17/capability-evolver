@@ -5,9 +5,11 @@ const path = require('path');
 const crypto = require('crypto');
 
 const MAX_SKILL_UPDATE_BYTES = 512 * 1024;
+const ALLOW_UNSIGNED_SKILL_UPDATE =
+  String(process.env.EVOMAP_ALLOW_UNSIGNED_SKILL_UPDATE || '').toLowerCase() === 'true';
 
 function verifyPayloadHash(content, expectedHash) {
-  if (!expectedHash) return true;
+  if (!expectedHash) return ALLOW_UNSIGNED_SKILL_UPDATE;
   const actual = crypto.createHash('sha256').update(content, 'utf8').digest('hex');
   return actual === String(expectedHash).toLowerCase();
 }
@@ -41,7 +43,7 @@ class SkillUpdater {
       return false;
     }
     if (!verifyPayloadHash(content, payload.sha256 || payload.content_sha256)) {
-      this.logger.warn('[skill-updater] skill_update hash mismatch');
+      this.logger.warn('[skill-updater] skill_update missing hash or hash mismatch');
       return false;
     }
 

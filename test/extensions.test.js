@@ -30,6 +30,14 @@ describe('SkillUpdater', () => {
     try { fs.rmSync(skillDir, { recursive: true }); } catch {}
   });
 
+  function withHash(content, version) {
+    return {
+      content,
+      version,
+      sha256: require('crypto').createHash('sha256').update(content, 'utf8').digest('hex'),
+    };
+  }
+
   it('updates skill.md from inbound message', () => {
     const skillPath = path.join(skillDir, 'SKILL.md');
     const updater = new SkillUpdater({
@@ -39,7 +47,7 @@ describe('SkillUpdater', () => {
     });
 
     const result = updater.processSkillUpdate({
-      payload: { content: '# Updated Skill\nNew content here.', version: '1.1.0' },
+      payload: withHash('# Updated Skill\nNew content here.', '1.1.0'),
     });
     assert.equal(result, true);
     assert.equal(fs.readFileSync(skillPath, 'utf8'), '# Updated Skill\nNew content here.');
@@ -57,7 +65,7 @@ describe('SkillUpdater', () => {
     });
 
     updater.processSkillUpdate({
-      payload: { content: 'updated content', version: '2.0' },
+      payload: withHash('updated content', '2.0'),
     });
     assert.equal(fs.readFileSync(skillPath, 'utf8'), 'updated content');
     assert.equal(fs.readFileSync(skillPath + '.bak', 'utf8'), 'original content');
@@ -80,6 +88,18 @@ describe('SkillUpdater', () => {
     assert.equal(updater.processSkillUpdate({ payload: {} }), false);
   });
 
+  it('returns false without a payload hash by default', () => {
+    const updater = new SkillUpdater({
+      store,
+      skillPath: path.join(skillDir, 'unsigned.md'),
+      logger: { log: () => {}, warn: () => {}, error: () => {} },
+    });
+    assert.equal(
+      updater.processSkillUpdate({ payload: { content: 'unsigned content', version: '0.1.0' } }),
+      false,
+    );
+  });
+
   it('pollAndApply processes pending skill_update messages', () => {
     const dir2 = tmpDataDir();
     const s2 = new MailboxStore(dir2);
@@ -87,7 +107,7 @@ describe('SkillUpdater', () => {
 
     s2.writeInbound({
       type: 'skill_update',
-      payload: { content: '# Polled skill', version: '3.0' },
+      payload: withHash('# Polled skill', '3.0'),
     });
 
     const updater = new SkillUpdater({
