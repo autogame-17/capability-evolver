@@ -9,7 +9,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 // 10 MB — prevents RangeError on large child process output (e.g. git log/diff
 // on large repos). See GHSA reports / issue #451.
 const MAX_EXEC_BUFFER = 10 * 1024 * 1024;
@@ -206,7 +206,8 @@ function runGh(args, opts) {
   const timeoutMs = (opts && opts.timeoutMs) || SELF_PR_TIMEOUT_MS;
   const cwd = (opts && opts.cwd) || getRepoRoot();
   try {
-    const result = execSync('gh ' + args, {
+    const argv = Array.isArray(args) ? args : String(args || '').split(/\s+/).filter(Boolean);
+    const result = execFileSync('gh', argv, {
       cwd: cwd,
       timeout: timeoutMs,
       encoding: 'utf8',
@@ -224,16 +225,18 @@ function getGitDiff(changedFiles, repoRoot) {
   for (const f of changedFiles) {
     const before = parts.length;
     try {
-      const result = execSync(
-        'git diff HEAD -- "' + f + '"',
+      const result = execFileSync(
+        'git',
+        ['diff', 'HEAD', '--', f],
         { cwd: repoRoot, timeout: 10000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: MAX_EXEC_BUFFER }
       );
       if (result && result.trim()) parts.push(result.trim());
     } catch (_) {}
     if (parts.length === before) {
       try {
-        const result = execSync(
-          'git diff -- "' + f + '"',
+        const result = execFileSync(
+          'git',
+          ['diff', '--', f],
           { cwd: repoRoot, timeout: 10000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], maxBuffer: MAX_EXEC_BUFFER }
         );
         if (result && result.trim()) parts.push(result.trim());
@@ -300,7 +303,7 @@ async function maybeCreatePR({ capsule, event, mutation, gene, blastRadius }) {
   try {
     console.log('[SelfPR] Creating PR on ' + repo + ' branch ' + branch + '...');
 
-    const forkCheck = runGh('repo view ' + repo + ' --json name', { timeoutMs: 15000 });
+    const forkCheck = runGh(['repo', 'view', repo, '--json', 'name'], { timeoutMs: 15000 });
     if (!forkCheck.ok) {
       console.warn('[SelfPR] Cannot access repo ' + repo + ': ' + (forkCheck.err || 'unknown'));
       return { attempted: false, reason: 'repo_access_failed' };
@@ -313,7 +316,7 @@ async function maybeCreatePR({ capsule, event, mutation, gene, blastRadius }) {
     fs.mkdirSync(tmpDir, { recursive: true });
 
     const cloneResult = runGh(
-      'repo clone ' + repo + ' "' + tmpDir + '" -- --depth 1',
+      ['repo', 'clone', repo, tmpDir, '--', '--depth', '1'],
       { timeoutMs: 60000 }
     );
     if (!cloneResult.ok) {
@@ -322,7 +325,7 @@ async function maybeCreatePR({ capsule, event, mutation, gene, blastRadius }) {
     }
 
     try {
-      execSync('git checkout -b "' + branch + '"', { cwd: tmpDir, timeout: 10000, maxBuffer: MAX_EXEC_BUFFER });
+      execFileSync('git', ['checkout', '-b', branch], { cwd: tmpDir, timeout: 10000, maxBuffer: MAX_EXEC_BUFFER });
     } catch (e) {
       console.warn('[SelfPR] Branch creation failed: ' + (e.message || e));
       return { attempted: false, reason: 'branch_failed' };
@@ -339,14 +342,15 @@ async function maybeCreatePR({ capsule, event, mutation, gene, blastRadius }) {
     }
 
     try {
-      execSync('git add -A', { cwd: tmpDir, timeout: 10000, maxBuffer: MAX_EXEC_BUFFER });
-      const statusOut = execSync('git status --porcelain', { cwd: tmpDir, timeout: 10000, encoding: 'utf8', maxBuffer: MAX_EXEC_BUFFER });
+      execFileSync('git', ['add', '-A'], { cwd: tmpDir, timeout: 10000, maxBuffer: MAX_EXEC_BUFFER });
+      const statusOut = execFileSync('git', ['status', '--porcelain'], { cwd: tmpDir, timeout: 10000, encoding: 'utf8', maxBuffer: MAX_EXEC_BUFFER });
       if (!statusOut || !statusOut.trim()) {
         console.log('[SelfPR] No changes to commit in public repo clone.');
         return { attempted: false, reason: 'no_public_diff' };
       }
-      execSync(
-        'git commit -m "' + title.replace(/"/g, '\\"') + '"',
+      execFileSync(
+        'git',
+        ['commit', '-m', title],
         { cwd: tmpDir, timeout: 10000, env: Object.assign({}, process.env, { GIT_AUTHOR_NAME: 'evolver-bot', GIT_AUTHOR_EMAIL: 'evolver-bot@evomap.ai', GIT_COMMITTER_NAME: 'evolver-bot', GIT_COMMITTER_EMAIL: 'evolver-bot@evomap.ai' }) }
       );
     } catch (e) {
@@ -355,7 +359,7 @@ async function maybeCreatePR({ capsule, event, mutation, gene, blastRadius }) {
     }
 
     try {
-      execSync('git push origin "' + branch + '"', { cwd: tmpDir, timeout: 30000 });
+      execFileSync('git', ['push', 'origin', branch], { cwd: tmpDir, timeout: 30000 });
     } catch (e) {
       console.warn('[SelfPR] Push failed: ' + (e.message || e));
       return { attempted: false, reason: 'push_failed' };
@@ -365,11 +369,7 @@ async function maybeCreatePR({ capsule, event, mutation, gene, blastRadius }) {
     fs.writeFileSync(bodyFile, body);
 
     const prResult = runGh(
-      'pr create --repo ' + repo +
-      ' --head "' + branch + '"' +
-      ' --title "' + title.replace(/"/g, '\\"') + '"' +
-      ' --body-file "' + bodyFile + '"' +
-      ' --label "auto-mutation"',
+      ['pr', 'create', '--repo', repo, '--head', branch, '--title', title, '--body-file', bodyFile, '--label', 'auto-mutation'],
       { cwd: tmpDir, timeoutMs: 30000 }
     );
 

@@ -5,7 +5,7 @@
 // When idle, the evolver can run more aggressive operations (distillation,
 // reflection); when busy, it only collects signals.
 
-const { execSync } = require('child_process');
+const { execSync, execFileSync } = require('child_process');
 // 10 MB — prevents RangeError on large child process output (e.g. git log/diff
 // on large repos). See GHSA reports / issue #451.
 const MAX_EXEC_BUFFER = 10 * 1024 * 1024;
@@ -40,19 +40,19 @@ function getSystemIdleSeconds() {
       ].join('\n');
       const tmpPs = path.join(require('os').tmpdir(), 'evolver_idle_check.ps1');
       require('fs').writeFileSync(tmpPs, psCode, 'utf8');
-      const result = execSync('powershell -NoProfile -ExecutionPolicy Bypass -File "' + tmpPs + '"', { timeout: 10000, encoding: 'utf8', maxBuffer: MAX_EXEC_BUFFER }).trim();
+      const result = execFileSync('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', tmpPs], { timeout: 10000, encoding: 'utf8', maxBuffer: MAX_EXEC_BUFFER }).trim();
       try { require('fs').unlinkSync(tmpPs); } catch (e) {}
       const seconds = parseInt(result, 10);
       return Number.isFinite(seconds) ? seconds : -1;
     } else if (platform === 'darwin') {
-      const result = execSync('ioreg -c IOHIDSystem | grep HIDIdleTime', { timeout: 5000, encoding: 'utf8', maxBuffer: MAX_EXEC_BUFFER });
+      const result = execFileSync('ioreg', ['-c', 'IOHIDSystem'], { timeout: 5000, encoding: 'utf8', maxBuffer: MAX_EXEC_BUFFER });
       const match = result.match(/(\d+)/);
       if (match) {
         return Math.floor(parseInt(match[1], 10) / 1000000000);
       }
     } else if (platform === 'linux') {
       try {
-        const result = execSync('xprintidle 2>/dev/null || echo -1', { timeout: 5000, encoding: 'utf8', maxBuffer: MAX_EXEC_BUFFER }).trim();
+        const result = execFileSync('xprintidle', [], { timeout: 5000, encoding: 'utf8', maxBuffer: MAX_EXEC_BUFFER }).trim();
         const ms = parseInt(result, 10);
         if (Number.isFinite(ms) && ms >= 0) return Math.floor(ms / 1000);
       } catch (e) {}

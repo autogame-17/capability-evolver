@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawnSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 // 10 MB — prevents RangeError on large child process output (e.g. git log/diff
 // on large repos). See GHSA reports / issue #451.
 const MAX_EXEC_BUFFER = 10 * 1024 * 1024;
@@ -52,16 +52,38 @@ function findMemoryGraph(evolverRoot) {
 function getGitDiffStats() {
   try {
     const cwd = process.cwd();
-    const stat = execSync('git diff --stat HEAD~1 2>/dev/null || git diff --stat 2>/dev/null || echo ""', {
-      cwd,
-      encoding: 'utf8',
-      timeout: 5000, maxBuffer: MAX_EXEC_BUFFER
-    }).trim();
-    const diffContent = execSync('git diff HEAD~1 --no-color 2>/dev/null || git diff --no-color 2>/dev/null || echo ""', {
-      cwd,
-      encoding: 'utf8',
-      timeout: 5000, maxBuffer: MAX_EXEC_BUFFER
-    }).trim();
+    let stat = '';
+    let diffContent = '';
+    try {
+      stat = execFileSync('git', ['diff', '--stat', 'HEAD~1'], {
+        cwd,
+        encoding: 'utf8',
+        timeout: 5000, maxBuffer: MAX_EXEC_BUFFER
+      }).trim();
+    } catch (_) {
+      try {
+        stat = execFileSync('git', ['diff', '--stat'], {
+          cwd,
+          encoding: 'utf8',
+          timeout: 5000, maxBuffer: MAX_EXEC_BUFFER
+        }).trim();
+      } catch (_) {}
+    }
+    try {
+      diffContent = execFileSync('git', ['diff', 'HEAD~1', '--no-color'], {
+        cwd,
+        encoding: 'utf8',
+        timeout: 5000, maxBuffer: MAX_EXEC_BUFFER
+      }).trim();
+    } catch (_) {
+      try {
+        diffContent = execFileSync('git', ['diff', '--no-color'], {
+          cwd,
+          encoding: 'utf8',
+          timeout: 5000, maxBuffer: MAX_EXEC_BUFFER
+        }).trim();
+      } catch (_) {}
+    }
     const filesChanged = (stat.match(/\d+ files? changed/) || ['0'])[0];
     const insertions = (stat.match(/(\d+) insertions?/) || [null, '0'])[1];
     const deletions = (stat.match(/(\d+) deletions?/) || [null, '0'])[1];
