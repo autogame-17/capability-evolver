@@ -420,6 +420,8 @@ Requires `GITHUB_TOKEN` (or `GH_TOKEN` / `GITHUB_PAT`) with `repo` scope. When n
 
 This section describes the execution boundaries and trust model of the Evolver.
 
+Operational guidance for safer deployment lives in [SECURITY.md](SECURITY.md).
+
 ### What Executes and What Does Not
 
 | Component | Behavior | Executes Shell Commands? |
