@@ -8,10 +8,12 @@ Recent security hardening in this branch includes:
 
 - local proxy authentication via per-install token
 - stricter permissions for proxy settings and mailbox state files
+- mailbox payload and batch size limits to reduce local abuse / disk growth
 - validator sandbox path restrictions
 - signed skill update enforcement by default
 - `force update` disabled unless explicitly enabled
 - `skills_monitor` auto-install disabled unless explicitly enabled
+- hub-sourced persisted feature flags disabled unless explicitly enabled
 - argv-based git/process execution in several modules to reduce shell injection risk
 
 ## Deployment Guidance
@@ -33,6 +35,7 @@ These flags materially increase risk and should stay off by default:
 - `EVOLVE_GIT_RESET=true`
 - `EVOLVER_ENABLE_FORCE_UPDATE=true`
 - `EVOLVER_ENABLE_SKILL_AUTO_INSTALL=true`
+- `EVOLVER_ENABLE_HUB_FEATURE_FLAGS=true`
 - `EVOMAP_ALLOW_UNSIGNED_SKILL_UPDATE=true`
 - `EVOMAP_PROXY_REQUIRE_AUTH=false`
 

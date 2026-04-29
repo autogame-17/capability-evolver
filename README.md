@@ -395,7 +395,7 @@ When connected to an [EvoMap Hub](https://evomap.ai), every evolver instance als
 | `EVOLVER_VALIDATOR_MAX_TASKS_PER_CYCLE` | `2` | Max tasks claimed per poll. |
 | `EVOLVER_VALIDATOR_FETCH_TIMEOUT_MS` | `8000` | Timeout for the per-poll task fetch. |
 
-Persistent flag override: when the env is unset, the runtime reads `~/.evomap/feature_flags.json`. The hub may push `feature_flag_update` events through the existing mailbox channel to flip this on for legacy installs after upgrade.
+Persistent flag override: when the env is unset, the runtime reads `~/.evomap/feature_flags.json`. Hub-pushed `feature_flag_update` events are ignored unless `EVOLVER_ENABLE_HUB_FEATURE_FLAGS=true` is explicitly set.
 
 To opt out permanently:
 

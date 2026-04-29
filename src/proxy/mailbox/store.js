@@ -9,6 +9,12 @@ const SCHEMA_VERSION = 1;
 const PROXY_PROTOCOL_VERSION = '0.1.0';
 const PRIVATE_FILE_MODE = 0o600;
 const PRIVATE_DIR_MODE = 0o700;
+const MAX_MESSAGE_PAYLOAD_BYTES = Math.max(1024, Number(process.env.EVOMAP_MAILBOX_MAX_PAYLOAD_BYTES) || 256 * 1024);
+const MAX_BATCH_MESSAGES = Math.max(1, Number(process.env.EVOMAP_MAILBOX_MAX_BATCH_MESSAGES) || 100);
+const MAX_TYPE_LENGTH = 80;
+const MAX_CHANNEL_LENGTH = 80;
+const MAX_REF_ID_LENGTH = 200;
+const VALID_PRIORITIES = new Set(['high', 'normal', 'low']);
 
 // Merge `fields` into `target` while stripping keys that can mutate the
 // prototype chain. Mailbox rows are persisted as JSONL and rebuilt on
@@ -68,6 +74,51 @@ function safeParse(payload) {
   if (payload == null) return null;
   if (typeof payload !== 'string') return payload;
   try { return JSON.parse(payload); } catch { return payload; }
+}
+
+function payloadSizeBytes(payload) {
+  try {
+    return Buffer.byteLength(JSON.stringify(payload == null ? null : payload), 'utf8');
+  } catch (_) {
+    return MAX_MESSAGE_PAYLOAD_BYTES + 1;
+  }
+}
+
+function normalizeStringField(value, fallback, maxLength, fieldName) {
+  const out = value == null || value === '' ? fallback : String(value);
+  if (!out || !out.trim()) {
+    throw new Error(fieldName + ' is required');
+  }
+  if (out.length > maxLength) {
+    throw new Error(fieldName + ' exceeds max length');
+  }
+  return out;
+}
+
+function normalizePriority(priority) {
+  const out = priority == null || priority === '' ? 'normal' : String(priority).toLowerCase();
+  if (!VALID_PRIORITIES.has(out)) throw new Error('invalid priority');
+  return out;
+}
+
+function normalizePayload(payload) {
+  const parsed = safeParse(payload);
+  if (payloadSizeBytes(parsed) > MAX_MESSAGE_PAYLOAD_BYTES) {
+    throw new Error('payload exceeds max size');
+  }
+  return parsed;
+}
+
+function normalizeEnvelope(fields) {
+  const data = fields || {};
+  return {
+    type: normalizeStringField(data.type, null, MAX_TYPE_LENGTH, 'type'),
+    channel: normalizeStringField(data.channel, DEFAULT_CHANNEL, MAX_CHANNEL_LENGTH, 'channel'),
+    payload: normalizePayload(data.payload),
+    priority: normalizePriority(data.priority),
+    ref_id: data.refId == null || data.refId === '' ? null : normalizeStringField(data.refId, null, MAX_REF_ID_LENGTH, 'ref_id'),
+    expires_at: data.expiresAt || null,
+  };
 }
 
 function appendLine(filePath, obj) {
@@ -194,20 +245,21 @@ class MailboxStore {
   // --- Public API: send / writeInbound ---
 
   send({ type, payload, channel, priority, refId, expiresAt }) {
+    const envelope = normalizeEnvelope({ type, payload, channel, priority, refId, expiresAt });
     const id = generateUUIDv7();
     const now = Date.now();
     const msg = {
       id,
-      channel: channel || DEFAULT_CHANNEL,
+      channel: envelope.channel,
       direction: 'outbound',
-      type,
+      type: envelope.type,
       status: 'pending',
-      payload: safeParse(payload),
-      priority: priority || 'normal',
-      ref_id: refId || null,
+      payload: envelope.payload,
+      priority: envelope.priority,
+      ref_id: envelope.ref_id,
       created_at: now,
       synced_at: null,
-      expires_at: expiresAt || null,
+      expires_at: envelope.expires_at,
       retry_count: 0,
       error: null,
     };
@@ -216,6 +268,7 @@ class MailboxStore {
   }
 
   writeInbound({ id, type, payload, channel, priority, refId, expiresAt }) {
+    const envelope = normalizeEnvelope({ type, payload, channel, priority, refId, expiresAt });
     const msgId = id || generateUUIDv7();
     // At-least-once delivery from the Hub / retry loops can send the same
     // message id twice. Without idempotency, poll() and countPending() would
@@ -225,16 +278,16 @@ class MailboxStore {
     const now = Date.now();
     const msg = {
       id: msgId,
-      channel: channel || DEFAULT_CHANNEL,
+      channel: envelope.channel,
       direction: 'inbound',
-      type,
+      type: envelope.type,
       status: 'pending',
-      payload: safeParse(payload),
-      priority: priority || 'normal',
-      ref_id: refId || null,
+      payload: envelope.payload,
+      priority: envelope.priority,
+      ref_id: envelope.ref_id,
       created_at: now,
       synced_at: null,
-      expires_at: expiresAt || null,
+      expires_at: envelope.expires_at,
       retry_count: 0,
       error: null,
     };
@@ -243,6 +296,8 @@ class MailboxStore {
   }
 
   writeInboundBatch(messages) {
+    if (!Array.isArray(messages)) throw new Error('messages must be an array');
+    if (messages.length > MAX_BATCH_MESSAGES) throw new Error('batch exceeds max message count');
     const ids = [];
     for (const m of messages) {
       ids.push(this.writeInbound(m));

@@ -35,6 +35,7 @@ describe('featureFlags persistence', function () {
   });
 
   it('persists value across cache resets', function () {
+    process.env.EVOLVER_ENABLE_HUB_FEATURE_FLAGS = 'true';
     const ff = freshRequire('../src/gep/featureFlags');
     assert.equal(ff.writeFeatureFlag('validator_enabled', true, 'hub_mailbox'), true);
 
@@ -83,6 +84,7 @@ describe('isValidatorEnabled three-tier resolution', function () {
   });
 
   it('env=0 wins over persisted flag=true', function () {
+    process.env.EVOLVER_ENABLE_HUB_FEATURE_FLAGS = 'true';
     const ff = freshRequire('../src/gep/featureFlags');
     ff.writeFeatureFlag('validator_enabled', true, 'hub_mailbox');
     process.env.EVOLVER_VALIDATOR_ENABLED = '0';
@@ -91,6 +93,7 @@ describe('isValidatorEnabled three-tier resolution', function () {
   });
 
   it('env=1 wins over persisted flag=false', function () {
+    process.env.EVOLVER_ENABLE_HUB_FEATURE_FLAGS = 'true';
     const ff = freshRequire('../src/gep/featureFlags');
     ff.writeFeatureFlag('validator_enabled', false, 'hub_mailbox');
     process.env.EVOLVER_VALIDATOR_ENABLED = '1';
@@ -99,10 +102,23 @@ describe('isValidatorEnabled three-tier resolution', function () {
   });
 
   it('persisted flag=false applied when env unset', function () {
+    process.env.EVOLVER_ENABLE_HUB_FEATURE_FLAGS = 'true';
     const ff = freshRequire('../src/gep/featureFlags');
     ff.writeFeatureFlag('validator_enabled', false, 'hub_mailbox');
     const v = freshRequire('../src/gep/validator');
     assert.equal(v.isValidatorEnabled(), false);
+  });
+
+  it('rejects hub-sourced updates unless explicitly enabled', function () {
+    const ff = freshRequire('../src/gep/featureFlags');
+    assert.equal(ff.writeFeatureFlag('validator_enabled', false, 'hub_mailbox'), false);
+    assert.equal(ff.readFeatureFlag('validator_enabled'), undefined);
+  });
+
+  it('rejects unknown keys and invalid value types', function () {
+    const ff = freshRequire('../src/gep/featureFlags');
+    assert.equal(ff.writeFeatureFlag('unexpected_flag', true, 'manual'), false);
+    assert.equal(ff.writeFeatureFlag('validator_enabled', 'true', 'manual'), false);
   });
 
   it('accepts off/false/no aliases for env opt-out', function () {

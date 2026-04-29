@@ -19,9 +19,25 @@ const os = require('os');
 const FLAGS_DIR = path.join(os.homedir(), '.evomap');
 const FLAGS_FILE = path.join(FLAGS_DIR, 'feature_flags.json');
 const LOCAL_FLAGS_FILE = path.resolve(__dirname, '..', '..', '.evomap_feature_flags.json');
+const ALLOWED_FLAGS = new Map([
+  ['validator_enabled', function (value) { return typeof value === 'boolean'; }],
+]);
 
 let _cache = null;
 let _cacheLoaded = false;
+
+function _normalizeSource(source) {
+  return typeof source === 'string' && source ? source.trim().toLowerCase() : 'unknown';
+}
+
+function _isHubSource(source) {
+  return source === 'hub_mailbox' || source === 'hub_event' || source === 'hub';
+}
+
+function _isHubFeatureFlagsEnabled() {
+  const raw = String(process.env.EVOLVER_ENABLE_HUB_FEATURE_FLAGS || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
 
 function _readFile(p) {
   try {
@@ -77,10 +93,14 @@ function readFeatureFlag(key) {
  */
 function writeFeatureFlag(key, value, source) {
   if (!key || typeof key !== 'string') return false;
+  const validator = ALLOWED_FLAGS.get(key);
+  if (typeof validator !== 'function' || !validator(value)) return false;
+  const normalizedSource = _normalizeSource(source);
+  if (_isHubSource(normalizedSource) && !_isHubFeatureFlagsEnabled()) return false;
   const all = _loadFromDisk();
   all[key] = {
     value,
-    source: typeof source === 'string' && source ? source : 'unknown',
+    source: normalizedSource,
     updatedAt: new Date().toISOString(),
   };
   const ok = _writeToDisk(all);
@@ -111,4 +131,5 @@ module.exports = {
   _resetCacheForTests,
   FLAGS_FILE,
   LOCAL_FLAGS_FILE,
+  ALLOWED_FLAGS,
 };
