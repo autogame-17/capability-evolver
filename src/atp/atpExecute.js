@@ -27,6 +27,7 @@ const https = require('https');
 const crypto = require('crypto');
 
 const { computeAssetId } = require('../gep/contentHash');
+const { redactString } = require('../gep/sanitize');
 const {
   getNodeId,
   getHubUrl,
@@ -38,10 +39,26 @@ const { submitDelivery } = require('./hubClient');
 
 const MAX_ANSWER_CHARS = 32000; // cap capsule.content to protect Hub payload limits
 const PUBLISH_TIMEOUT_MS = 15000;
+const MAX_METADATA_ITEMS = 8;
+const MAX_METADATA_STRING = 80;
+
+function _cleanString(value, fallback, maxLength) {
+  const text = redactString(String(value == null ? '' : value)).trim();
+  if (!text) return fallback || '';
+  return text.slice(0, maxLength);
+}
+
+function _cleanList(values, fallback) {
+  const list = Array.isArray(values) ? values : fallback;
+  return list
+    .map(function (item) { return _cleanString(item, '', MAX_METADATA_STRING); })
+    .filter(Boolean)
+    .slice(0, MAX_METADATA_ITEMS);
+}
 
 function _readAnswer(answerFile) {
   const raw = fs.readFileSync(answerFile, 'utf8');
-  const trimmed = String(raw || '').trim();
+  const trimmed = redactString(String(raw || '').trim());
   if (!trimmed) throw new Error('answer file is empty');
   if (trimmed.length > MAX_ANSWER_CHARS) {
     return trimmed.slice(0, MAX_ANSWER_CHARS - 40) + '\n...[TRUNCATED]...';
@@ -50,12 +67,8 @@ function _readAnswer(answerFile) {
 }
 
 function _buildGene(capabilities, signals) {
-  const caps = Array.isArray(capabilities) && capabilities.length > 0
-    ? capabilities.slice(0, 8)
-    : ['general'];
-  const sig = Array.isArray(signals) && signals.length > 0
-    ? signals.slice(0, 8)
-    : ['atp_task'];
+  const caps = _cleanList(capabilities, ['general']);
+  const sig = _cleanList(signals, ['atp_task']);
   const gene = {
     type: 'Gene',
     schema_version: '1.0',
@@ -78,11 +91,11 @@ function _buildGene(capabilities, signals) {
 }
 
 function _buildCapsule({ gene, answer, summary, orderId, taskId, capabilities, signals }) {
-  const caps = Array.isArray(capabilities) ? capabilities.slice(0, 8) : [];
-  const sig = Array.isArray(signals) && signals.length > 0 ? signals.slice(0, 8) : ['atp_task'];
+  const caps = _cleanList(capabilities, []);
+  const sig = _cleanList(signals, ['atp_task']);
   const confidence = 0.9; // merchant self-attested; buyer verify may override
-  const capsuleSummary = String(summary || '').trim()
-    || 'ATP merchant delivery for order ' + String(orderId || '').slice(0, 24);
+  const capsuleSummary = _cleanString(summary, '', 200)
+    || 'ATP merchant delivery for order ' + _cleanString(orderId || '', '', 24);
   const capsule = {
     type: 'Capsule',
     schema_version: '1.0',
@@ -94,7 +107,7 @@ function _buildCapsule({ gene, answer, summary, orderId, taskId, capabilities, s
     blast_radius: { files: 0, lines: Math.min(1000, answer.split('\n').length) },
     outcome: { status: 'success', score: confidence },
     env_fingerprint: { platform: process.platform, arch: process.arch, runtime: 'evolver-atp' },
-    content: answer,
+    content: redactString(String(answer || '')),
     source_type: 'atp_task_executor',
     atp: {
       order_id: orderId || null,
