@@ -74,6 +74,26 @@ function assertNodeCommandSafe(parsed) {
   }
 }
 
+function assertScriptPathSafe(parsed, cwd) {
+  if (parsed.executable !== 'node') return;
+  const firstPositional = parsed.args.find((a) => !a.startsWith('-'));
+  if (!firstPositional) {
+    throw new Error('missing_script_file');
+  }
+  if (path.isAbsolute(firstPositional)) {
+    throw new Error('absolute_script_path_not_allowed');
+  }
+  const resolvedCwd = path.resolve(String(cwd || '.'));
+  const resolvedScript = path.resolve(resolvedCwd, firstPositional);
+  const rel = path.relative(resolvedCwd, resolvedScript);
+  if (!rel || rel === '..' || rel.startsWith('..' + path.sep) || path.isAbsolute(rel)) {
+    throw new Error('script_path_escapes_sandbox');
+  }
+  if (!fs.existsSync(resolvedScript)) {
+    throw new Error('script_not_found_in_sandbox');
+  }
+}
+
 // Parse a command string into executable + argv array, supporting single and
 // double quotes. This is a minimal parser and does NOT expand environment
 // variables, globs, redirects, pipes, or subshells. If the command string
@@ -193,6 +213,7 @@ function runSingleCommand(cmd, opts) {
     try {
       parsed = parseCommand(String(cmd));
       assertNodeCommandSafe(parsed);
+      assertScriptPathSafe(parsed, cwd);
     } catch (err) {
       resolve({
         cmd: String(cmd),
@@ -390,6 +411,7 @@ module.exports = {
   buildSandboxEnv,
   parseCommand,
   assertNodeCommandSafe,
+  assertScriptPathSafe,
   ALLOWED_EXECUTABLES,
   BLOCKED_NODE_FLAGS,
   DEFAULT_CMD_TIMEOUT_MS,

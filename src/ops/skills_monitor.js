@@ -29,6 +29,9 @@ try {
     }
 } catch (e) { /* ignore */ }
 
+const ALLOW_AUTO_NPM_INSTALL =
+    String(process.env.EVOLVER_ENABLE_SKILL_AUTO_INSTALL || '').toLowerCase() === 'true';
+
 function checkSkill(skillName) {
     var SKILLS_DIR = getSkillsDir();
     if (IGNORE_LIST.has(skillName)) return null;
@@ -92,6 +95,10 @@ function autoHeal(skillName, issues) {
 
     for (var i = 0; i < issues.length; i++) {
         if (issues[i] === 'Missing node_modules (needs npm install)' || issues[i] === 'Empty node_modules (needs npm install)') {
+            if (!ALLOW_AUTO_NPM_INSTALL) {
+                console.warn('[SkillsMonitor] Auto npm install disabled for ' + skillName + '. Set EVOLVER_ENABLE_SKILL_AUTO_INSTALL=true to opt in.');
+                continue;
+            }
             try {
                 // Remove package-lock.json if it exists to prevent conflict errors
                 try { fs.unlinkSync(path.join(skillPath, 'package-lock.json')); } catch (e) {}

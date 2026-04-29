@@ -395,7 +395,7 @@ When connected to an [EvoMap Hub](https://evomap.ai), every evolver instance als
 | `EVOLVER_VALIDATOR_MAX_TASKS_PER_CYCLE` | `2` | Max tasks claimed per poll. |
 | `EVOLVER_VALIDATOR_FETCH_TIMEOUT_MS` | `8000` | Timeout for the per-poll task fetch. |
 
-Persistent flag override: when the env is unset, the runtime reads `~/.evomap/feature_flags.json`. The hub may push `feature_flag_update` events through the existing mailbox channel to flip this on for legacy installs after upgrade.
+Persistent flag override: when the env is unset, the runtime reads `~/.evomap/feature_flags.json`. Hub-pushed `feature_flag_update` events are ignored unless `EVOLVER_ENABLE_HUB_FEATURE_FLAGS=true` is explicitly set.
 
 To opt out permanently:
 
@@ -410,6 +410,7 @@ When the evolver detects persistent failures (failure loop or recurring errors w
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `EVOLVER_AUTO_ISSUE` | `true` | Enable/disable auto issue reporting |
+| `EVOLVER_ISSUE_INCLUDE_LOGS` | _(unset = off)_ | Include sanitized session log excerpts in auto-reported issues |
 | `EVOLVER_ISSUE_REPO` | `autogame-17/capability-evolver` | Target GitHub repository (owner/repo) |
 | `EVOLVER_ISSUE_COOLDOWN_MS` | `86400000` (24h) | Cooldown period for the same error signature |
 | `EVOLVER_ISSUE_MIN_STREAK` | `5` | Minimum consecutive failure streak to trigger |
@@ -419,6 +420,8 @@ Requires `GITHUB_TOKEN` (or `GH_TOKEN` / `GITHUB_PAT`) with `repo` scope. When n
 ## Security Model
 
 This section describes the execution boundaries and trust model of the Evolver.
+
+Operational guidance for safer deployment lives in [SECURITY.md](SECURITY.md).
 
 ### What Executes and What Does Not
 

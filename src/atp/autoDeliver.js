@@ -24,12 +24,17 @@ const fs = require('fs');
 const path = require('path');
 
 const { getMemoryDir } = require('../gep/paths');
+const { redactString } = require('../gep/sanitize');
 const hubClient = require('./hubClient');
 
 const DEFAULT_POLL_MS = 60 * 1000; // 1 min
 const MIN_POLL_MS = 15 * 1000;
 const LEDGER_FILENAME = 'atp-autodeliver-ledger.json';
 const LEDGER_MAX_ENTRIES = 500;
+const PRIVATE_FILE_MODE = 0o600;
+const PRIVATE_DIR_MODE = 0o700;
+const MAX_SIGNAL_ITEMS = 10;
+const MAX_SIGNAL_LENGTH = 80;
 
 let _started = false;
 let _pollInterval = null;
@@ -65,7 +70,7 @@ function _readLedger() {
 function _writeLedger(ledger) {
   try {
     const dir = getMemoryDir();
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
     // Bound the ledger size so it cannot grow without limit on long-running
     // merchants. Keep the most-recent entries by insertion order.
     const entries = Object.entries(ledger.submitted || {});
@@ -74,8 +79,9 @@ function _writeLedger(ledger) {
       ledger.submitted = trimmed;
     }
     const tmp = _ledgerPath() + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2), { encoding: 'utf8', mode: PRIVATE_FILE_MODE });
     fs.renameSync(tmp, _ledgerPath());
+    try { fs.chmodSync(_ledgerPath(), PRIVATE_FILE_MODE); } catch (_) {}
   } catch (_) {
     // Non-fatal: next poll will re-attempt from Hub state. Hub-side
     // submitDelivery is itself idempotent per order id.
@@ -83,6 +89,9 @@ function _writeLedger(ledger) {
 }
 
 function _buildProofPayload(task) {
+  const safeSignals = Array.isArray(task.signals)
+    ? task.signals.map(function (s) { return redactString(String(s || '')).trim().slice(0, MAX_SIGNAL_LENGTH); }).filter(Boolean).slice(0, MAX_SIGNAL_ITEMS)
+    : [];
   // Minimal evidence the Hub's auto verifier will accept. Matches the shape
   // documented in /a2a/atp/deliver: result/output/pass_rate/signals.
   const now = new Date().toISOString();
@@ -91,7 +100,7 @@ function _buildProofPayload(task) {
     asset_id: task.result_asset_id || null,
     completed_at: task.claimed_at || now,
     pass_rate: 1.0,
-    signals: Array.isArray(task.signals) ? task.signals.slice(0, 10) : [],
+    signals: safeSignals,
     submitter: 'evolver_auto_deliver',
   };
 }

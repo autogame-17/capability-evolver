@@ -16,7 +16,7 @@
 
 const http = require('http');
 const { getHubUrl, buildHubHeaders, getNodeId } = require('../gep/a2aProtocol');
-const { getProxyUrl } = require('../proxy/server/settings');
+const { getProxyUrl, getProxyRequestHeaders } = require('../proxy/server/settings');
 
 function _isProxyMode() {
   if (process.env.EVOMAP_PROXY === '1') return true;
@@ -33,7 +33,7 @@ function _proxyRequest(method, path, body, timeoutMs) {
 
   return new Promise(function (resolve) {
     const payload = body ? JSON.stringify(body) : '';
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = Object.assign({ 'Content-Type': 'application/json' }, getProxyRequestHeaders());
     if (payload) headers['Content-Length'] = Buffer.byteLength(payload);
 
     const req = http.request(

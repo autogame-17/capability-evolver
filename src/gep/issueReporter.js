@@ -16,6 +16,12 @@ const DEFAULT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_MIN_STREAK = 5;
 const MAX_LOG_CHARS = 2000;
 const MAX_EVENTS = 5;
+const PRIVATE_FILE_MODE = 0o600;
+
+function isIssueLogInclusionEnabled() {
+  const raw = String(process.env.EVOLVER_ISSUE_INCLUDE_LOGS || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+}
 
 function getConfig() {
   const enabled = String(process.env.EVOLVER_AUTO_ISSUE || 'true').toLowerCase();
@@ -51,14 +57,28 @@ function writeState(state) {
   try {
     const dir = getEvolutionDir();
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(getStatePath(), JSON.stringify(state, null, 2) + '\n');
+    const target = getStatePath();
+    const tmp = target + '.tmp';
+    fs.writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', { encoding: 'utf8', mode: PRIVATE_FILE_MODE });
+    fs.renameSync(tmp, target);
+    try { fs.chmodSync(target, PRIVATE_FILE_MODE); } catch (_) {}
   } catch (_) {}
 }
 
-function truncateNodeId(nodeId) {
+function redactNodeId(nodeId) {
   if (!nodeId || typeof nodeId !== 'string') return 'unknown';
-  if (nodeId.length <= 10) return nodeId;
-  return nodeId.slice(0, 10) + '...';
+  return 'node:' + crypto.createHash('sha256').update(nodeId).digest('hex').slice(0, 12);
+}
+
+function selectSafeFingerprint(fp) {
+  const raw = fp && typeof fp === 'object' ? fp : {};
+  return {
+    evolver_version: raw.evolver_version || 'unknown',
+    node_version: raw.node_version || process.version,
+    platform: raw.platform || process.platform,
+    arch: raw.arch || process.arch,
+    container: !!raw.container,
+  };
 }
 
 function computeErrorKey(signals) {
@@ -102,8 +122,8 @@ function formatRecentEvents(events) {
   if (!Array.isArray(events) || events.length === 0) return '_No recent events available._';
   const failed = events.filter(function (e) { return e && e.outcome && e.outcome.status === 'failed'; });
   const rows = failed.slice(-MAX_EVENTS).map(function (e, idx) {
-    const intent = e.intent || '-';
-    const gene = (Array.isArray(e.genes_used) && e.genes_used[0]) || '-';
+    const intent = redactString(String(e.intent || '-')).slice(0, 80);
+    const gene = redactString(String((Array.isArray(e.genes_used) && e.genes_used[0]) || '-')).slice(0, 80);
     const outcome = (e.outcome && e.outcome.status) || '-';
     let reason = (e.outcome && e.outcome.reason) || '';
     if (reason.length > 80) reason = reason.slice(0, 80) + '...';
@@ -115,13 +135,13 @@ function formatRecentEvents(events) {
 }
 
 function buildIssueBody(opts) {
-  const fp = opts.envFingerprint || captureEnvFingerprint();
+  const fp = selectSafeFingerprint(opts.envFingerprint || captureEnvFingerprint());
   const signals = opts.signals || [];
   const recentEvents = opts.recentEvents || [];
   const sessionLog = opts.sessionLog || '';
   const streakCount = extractStreakCount(signals);
   const errorSig = extractErrorSignature(signals);
-  const nodeId = truncateNodeId(getNodeId());
+  const nodeId = redactNodeId(getNodeId());
 
   const failureSignals = signals.filter(function (s) {
     return s.startsWith('recurring_') ||
@@ -132,9 +152,9 @@ function buildIssueBody(opts) {
       s === 'force_innovation_after_repair_loop';
   }).join(', ');
 
-  const sanitizedLog = redactString(
-    typeof sessionLog === 'string' ? sessionLog.slice(-MAX_LOG_CHARS) : ''
-  );
+  const sanitizedLog = isIssueLogInclusionEnabled()
+    ? redactString(typeof sessionLog === 'string' ? sessionLog.slice(-MAX_LOG_CHARS) : '')
+    : '';
 
   const eventsTable = formatRecentEvents(recentEvents);
 
@@ -162,10 +182,10 @@ function buildIssueBody(opts) {
     eventsTable,
     '',
     '## Session Log Excerpt (sanitized)',
-    '```',
-    sanitizedLog || '_No session log available._',
-    '```',
-    '',
+    sanitizedLog ? '```' : '',
+    sanitizedLog || '_Log excerpt omitted by default. Set EVOLVER_ISSUE_INCLUDE_LOGS=true to include sanitized logs._',
+    sanitizedLog ? '```' : '',
+    sanitizedLog ? '' : '',
     '---',
     '_This issue was automatically created by evolver v' + (fp.evolver_version || 'unknown') + '._',
     '_Device: ' + nodeId + ' | Report ID: ' + reportId + '_',

@@ -32,6 +32,15 @@ describe('atpExecute._buildGene', () => {
     const g = _buildGene(manyCaps, manySigs);
     assert.ok(g.signals_match.length <= 8, 'signals_match should be clamped');
   });
+
+  it('sanitizes capability and signal metadata', () => {
+    const g = _buildGene(
+      ['code_evolution', 'A2A_NODE_SECRET=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789'],
+      ['task_for /home/alice/private']
+    );
+    assert.ok(!g.id.includes('A2A_NODE_SECRET'));
+    assert.ok(g.signals_match[0].includes('[REDACTED]'));
+  });
 });
 
 describe('atpExecute._buildCapsule', () => {
@@ -53,6 +62,19 @@ describe('atpExecute._buildCapsule', () => {
     assert.equal(capsule.atp.order_id, 'proof_abc123');
     assert.equal(capsule.atp.task_id, 'task_xyz789');
     assert.ok(capsule.asset_id.startsWith('sha256:'));
+  });
+
+  it('redacts secrets and local paths from capsule content and summary', () => {
+    const gene = _buildGene(['general'], []);
+    const capsule = _buildCapsule({
+      gene: gene,
+      answer: 'token=abcdefghijklmnop1234567890 and /home/alice/private',
+      summary: 'A2A_NODE_SECRET=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+      orderId: 'proof_secret',
+    });
+    assert.ok(capsule.content.includes('[REDACTED]'));
+    assert.ok(!capsule.content.includes('/home/alice/private'));
+    assert.ok(capsule.summary.includes('[REDACTED]'));
   });
 
   it('defaults capsule summary when caller does not provide one', () => {

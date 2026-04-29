@@ -5,7 +5,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync, spawn } = require('child_process');
+const { execFileSync, spawn } = require('child_process');
 // 10 MB — prevents RangeError on large child process output (e.g. git log/diff
 // on large repos). See GHSA reports / issue #451.
 const MAX_EXEC_BUFFER = 10 * 1024 * 1024;
@@ -34,13 +34,22 @@ function sleepMs(ms) {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, delay);
 }
 
-function execText(command) {
-    return execSync(command, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: MAX_EXEC_BUFFER });
+function execText(file, args) {
+    return execFileSync(file, Array.isArray(args) ? args : [], {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        maxBuffer: MAX_EXEC_BUFFER,
+        windowsHide: true,
+    });
 }
 
 function listProcesses() {
     if (process.platform === 'win32') {
-        var out = execText('powershell -NoProfile -Command "Get-CimInstance Win32_Process | ForEach-Object { $cmd = if ($_.CommandLine) { $_.CommandLine } else { \'\' }; Write-Output (\'{0}\\t{1}\' -f $_.ProcessId, $cmd) }"');
+        var out = execText('powershell', [
+            '-NoProfile',
+            '-Command',
+            "Get-CimInstance Win32_Process | ForEach-Object { $cmd = if ($_.CommandLine) { $_.CommandLine } else { '' }; Write-Output ('{0}`t{1}' -f $_.ProcessId, $cmd) }",
+        ]);
         var procs = [];
         for (var line of out.split(/\r?\n/)) {
             if (!line || !line.trim()) continue;
@@ -52,7 +61,7 @@ function listProcesses() {
         }
         return procs;
     }
-    var psOut = execText('ps -e -o pid=,args=');
+    var psOut = execText('ps', ['-e', '-o', 'pid=,args=']);
     var unixProcs = [];
     for (var psLine of psOut.split('\n')) {
         var trimmed = psLine.trim();

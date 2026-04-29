@@ -3,7 +3,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const { getRepoRoot } = require('./paths');
 
 // 10 MB — prevents RangeError: stdout maxBuffer length exceeded on large
@@ -11,15 +11,23 @@ const { getRepoRoot } = require('./paths');
 // on repos with large refactors (see GHSA reports / issue #451).
 const MAX_EXEC_BUFFER = 10 * 1024 * 1024;
 
-function runCmd(cmd, opts = {}) {
+function runCmd(args, opts = {}) {
+  const argv = Array.isArray(args) ? args : [];
   const cwd = opts.cwd || getRepoRoot();
   const timeoutMs = Number.isFinite(Number(opts.timeoutMs)) ? Number(opts.timeoutMs) : 120000;
-  return execSync(cmd, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], timeout: timeoutMs, maxBuffer: MAX_EXEC_BUFFER, windowsHide: true });
+  return execFileSync('git', argv, {
+    cwd,
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe'],
+    timeout: timeoutMs,
+    maxBuffer: MAX_EXEC_BUFFER,
+    windowsHide: true,
+  });
 }
 
-function tryRunCmd(cmd, opts = {}) {
+function tryRunCmd(args, opts = {}) {
   try {
-    return { ok: true, out: runCmd(cmd, opts), err: '' };
+    return { ok: true, out: runCmd(args, opts), err: '' };
   } catch (e) {
     const stderr = e && e.stderr ? String(e.stderr) : '';
     const stdout = e && e.stdout ? String(e.stdout) : '';
@@ -47,17 +55,17 @@ function countFileLines(absPath) {
 
 function gitListChangedFiles({ repoRoot }) {
   const files = new Set();
-  const s1 = tryRunCmd('git diff --name-only', { cwd: repoRoot, timeoutMs: 60000 });
+  const s1 = tryRunCmd(['diff', '--name-only'], { cwd: repoRoot, timeoutMs: 60000 });
   if (s1.ok) for (const line of String(s1.out).split('\n').map(l => l.trim()).filter(Boolean)) files.add(line);
-  const s2 = tryRunCmd('git diff --cached --name-only', { cwd: repoRoot, timeoutMs: 60000 });
+  const s2 = tryRunCmd(['diff', '--cached', '--name-only'], { cwd: repoRoot, timeoutMs: 60000 });
   if (s2.ok) for (const line of String(s2.out).split('\n').map(l => l.trim()).filter(Boolean)) files.add(line);
-  const s3 = tryRunCmd('git ls-files --others --exclude-standard', { cwd: repoRoot, timeoutMs: 60000 });
+  const s3 = tryRunCmd(['ls-files', '--others', '--exclude-standard'], { cwd: repoRoot, timeoutMs: 60000 });
   if (s3.ok) for (const line of String(s3.out).split('\n').map(l => l.trim()).filter(Boolean)) files.add(line);
   return Array.from(files);
 }
 
 function gitListUntrackedFiles(repoRoot) {
-  const r = tryRunCmd('git ls-files --others --exclude-standard', { cwd: repoRoot, timeoutMs: 60000 });
+  const r = tryRunCmd(['ls-files', '--others', '--exclude-standard'], { cwd: repoRoot, timeoutMs: 60000 });
   if (!r.ok) return [];
   return String(r.out).split('\n').map(l => l.trim()).filter(Boolean);
 }
@@ -66,9 +74,9 @@ const DIFF_SNAPSHOT_MAX_CHARS = 8000;
 
 function captureDiffSnapshot(repoRoot) {
   const parts = [];
-  const unstaged = tryRunCmd('git diff', { cwd: repoRoot, timeoutMs: 30000 });
+  const unstaged = tryRunCmd(['diff'], { cwd: repoRoot, timeoutMs: 30000 });
   if (unstaged.ok && unstaged.out) parts.push(String(unstaged.out));
-  const staged = tryRunCmd('git diff --cached', { cwd: repoRoot, timeoutMs: 30000 });
+  const staged = tryRunCmd(['diff', '--cached'], { cwd: repoRoot, timeoutMs: 30000 });
   if (staged.ok && staged.out) parts.push(String(staged.out));
   let combined = parts.join('\n');
   if (combined.length > DIFF_SNAPSHOT_MAX_CHARS) {
@@ -79,9 +87,10 @@ function captureDiffSnapshot(repoRoot) {
 
 function isGitRepo(dir) {
   try {
-    execSync('git rev-parse --git-dir', {
+    execFileSync('git', ['rev-parse', '--git-dir'], {
       cwd: dir, encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'], timeout: 5000, maxBuffer: MAX_EXEC_BUFFER,
+      windowsHide: true,
     });
     return true;
   } catch (_) {
@@ -139,20 +148,20 @@ function rollbackTracked(repoRoot) {
 
   if (mode === 'stash') {
     const stashRef = 'evolver-rollback-' + Date.now();
-    const result = tryRunCmd('git stash push -m "' + stashRef + '" --include-untracked', { cwd: repoRoot, timeoutMs: 60000 });
+    const result = tryRunCmd(['stash', 'push', '-m', stashRef, '--include-untracked'], { cwd: repoRoot, timeoutMs: 60000 });
     if (result.ok) {
       console.log('[Rollback] Changes stashed with ref: ' + stashRef + '. Recover with "git stash list" and "git stash pop".');
     } else {
       console.log('[Rollback] Stash failed or no changes, using hard reset');
-      tryRunCmd('git restore --staged --worktree .', { cwd: repoRoot, timeoutMs: 60000 });
-      tryRunCmd('git reset --hard', { cwd: repoRoot, timeoutMs: 60000 });
+      tryRunCmd(['restore', '--staged', '--worktree', '.'], { cwd: repoRoot, timeoutMs: 60000 });
+      tryRunCmd(['reset', '--hard'], { cwd: repoRoot, timeoutMs: 60000 });
     }
     return;
   }
 
   console.log('[Rollback] EVOLVER_ROLLBACK_MODE=hard, resetting tracked files in: ' + repoRoot);
-  tryRunCmd('git restore --staged --worktree .', { cwd: repoRoot, timeoutMs: 60000 });
-  tryRunCmd('git reset --hard', { cwd: repoRoot, timeoutMs: 60000 });
+  tryRunCmd(['restore', '--staged', '--worktree', '.'], { cwd: repoRoot, timeoutMs: 60000 });
+  tryRunCmd(['reset', '--hard'], { cwd: repoRoot, timeoutMs: 60000 });
 }
 
 function rollbackNewUntrackedFiles({ repoRoot, baselineUntracked }) {

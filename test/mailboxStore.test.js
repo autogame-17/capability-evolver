@@ -81,6 +81,18 @@ describe('MailboxStore', () => {
       const msg = store.getById(result.message_id);
       assert.deepEqual(msg.payload, { raw: true });
     });
+
+    it('rejects oversized payloads and invalid priorities', () => {
+      assert.throws(() => store.send({
+        type: 'too_big',
+        payload: { blob: 'x'.repeat(300 * 1024) },
+      }), /payload exceeds max size/);
+      assert.throws(() => store.send({
+        type: 'bad_priority',
+        payload: {},
+        priority: 'urgent',
+      }), /invalid priority/);
+    });
   });
 
   describe('writeInbound()', () => {
@@ -128,6 +140,14 @@ describe('MailboxStore', () => {
         assert.ok(msg);
         assert.equal(msg.direction, 'inbound');
       }
+    });
+
+    it('rejects oversized batches', () => {
+      const batch = [];
+      for (let i = 0; i < 101; i++) {
+        batch.push({ type: 'dm', payload: { i } });
+      }
+      assert.throws(() => store.writeInboundBatch(batch), /batch exceeds max message count/);
     });
   });
 

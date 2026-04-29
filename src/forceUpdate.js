@@ -4,6 +4,7 @@ const { execSync } = require('child_process');
 const { getRepoRoot } = require('./gep/paths');
 
 const MAX_EXEC_BUFFER = 10 * 1024 * 1024;
+const FORCE_UPDATE_ENABLED = String(process.env.EVOLVER_ENABLE_FORCE_UPDATE || '').toLowerCase() === 'true';
 
 // Force Update: triggered by Hub when version is critically outdated.
 // Extracted from src/evolve.js so both the evolve main loop and heartbeat
@@ -14,6 +15,14 @@ function executeForceUpdate(forceUpdate) {
   const REPO_ROOT = getRepoRoot();
   const requiredVersion = String(forceUpdate.required_version || '').replace(/^>=/, '');
   console.log('[ForceUpdate] Starting multi-channel update (target: >=' + requiredVersion + ')');
+
+  if (!FORCE_UPDATE_ENABLED) {
+    console.warn('[ForceUpdate] Automatic force update is disabled. Set EVOLVER_ENABLE_FORCE_UPDATE=true to opt in.');
+    if (forceUpdate && forceUpdate.release_url) {
+      console.warn('[ForceUpdate] Manual update URL: ' + forceUpdate.release_url);
+    }
+    return false;
+  }
 
   function parseVer(v) {
     var m = String(v || '').match(/(\d+)\.(\d+)\.(\d+)/);

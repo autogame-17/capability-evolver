@@ -1,7 +1,7 @@
 'use strict';
 
 const http = require('http');
-const { getProxyUrl } = require('../proxy/server/settings');
+const { getProxyUrl, getProxyRequestHeaders } = require('../proxy/server/settings');
 
 function _request(method, path, body) {
   const proxyUrl = getProxyUrl();
@@ -13,16 +13,17 @@ function _request(method, path, body) {
 
   return new Promise((resolve, reject) => {
     const payload = body ? JSON.stringify(body) : '';
+    const headers = Object.assign({
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+    }, getProxyRequestHeaders());
     const req = http.request(
       {
         hostname: url.hostname,
         port: url.port,
-        path: url.pathname,
+        path: url.pathname + (url.search || ''),
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(payload),
-        },
+        headers,
         timeout: 10_000,
       },
       (res) => {
