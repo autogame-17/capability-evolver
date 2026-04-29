@@ -169,12 +169,14 @@ describe('autoDeliver.buildProofPayload', () => {
     const p = autoDeliver.__internals.buildProofPayload({
       result_asset_id: 'asset_xyz',
       claimed_at: '2026-04-27T00:00:00.000Z',
-      signals: ['s1'],
+      signals: ['s1', 'token=abcdefghijklmnop1234567890', 'path:/home/alice/private'],
     });
     assert.equal(p.result, 'completed');
     assert.equal(p.asset_id, 'asset_xyz');
     assert.equal(p.pass_rate, 1.0);
     assert.equal(p.submitter, 'evolver_auto_deliver');
-    assert.deepEqual(p.signals, ['s1']);
+    assert.equal(p.signals[0], 's1');
+    assert.ok(p.signals[1].includes('[REDACTED]'));
+    assert.ok(p.signals[2].includes('[REDACTED]'));
   });
 });

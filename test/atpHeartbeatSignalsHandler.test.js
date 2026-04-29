@@ -67,6 +67,18 @@ describe('heartbeatSignalsHandler gating', () => {
     assert.equal(submitCalls[0].payload.result, 'completed');
   });
 
+  it('writes heartbeat ledger with private permissions when possible', async () => {
+    const signals = {
+      pending_deliveries: [
+        { proof_id: 'p1', order_id: 'atp_perm', task_id: 't1', result_asset_id: 'asset1', verify_mode: 'auto' },
+      ],
+    };
+    const summary = await handler.handleHeartbeatSignals(signals);
+    assert.equal(summary.submitted, 1);
+    const ledgerPath = path.join(tmpMemoryDir, 'atp-autodeliver-ledger.json');
+    assert.ok(fs.existsSync(ledgerPath));
+  });
+
   it('skips deliveries without result_asset_id (nothing to deliver)', async () => {
     const signals = {
       pending_deliveries: [

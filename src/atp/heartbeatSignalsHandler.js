@@ -22,12 +22,15 @@ const fs = require('fs');
 const path = require('path');
 
 const { getMemoryDir } = require('../gep/paths');
+const { redactString } = require('../gep/sanitize');
 const hubClient = require('./hubClient');
 
 const LEDGER_FILENAME = 'atp-autodeliver-ledger.json'; // shared with autoDeliver
 const LEDGER_MAX_ENTRIES = 500;
 const HANDLER_COOLDOWN_MS = 30 * 1000; // rate-limit per-node, independent of ledger
 const SUBMIT_TIMEOUT_MS = 10 * 1000;
+const PRIVATE_FILE_MODE = 0o600;
+const PRIVATE_DIR_MODE = 0o700;
 
 let _inflight = false;
 let _lastRunAt = 0;
@@ -61,14 +64,15 @@ function _readLedger() {
 function _writeLedger(ledger) {
   try {
     const dir = getMemoryDir();
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: PRIVATE_DIR_MODE });
     const entries = Object.entries(ledger.submitted || {});
     if (entries.length > LEDGER_MAX_ENTRIES) {
       ledger.submitted = Object.fromEntries(entries.slice(-LEDGER_MAX_ENTRIES));
     }
     const tmp = _ledgerPath() + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2));
+    fs.writeFileSync(tmp, JSON.stringify(ledger, null, 2), { encoding: 'utf8', mode: PRIVATE_FILE_MODE });
     fs.renameSync(tmp, _ledgerPath());
+    try { fs.chmodSync(_ledgerPath(), PRIVATE_FILE_MODE); } catch (_) {}
   } catch (_) {
     // Non-fatal: Hub submit is idempotent, next heartbeat will retry
   }
@@ -83,7 +87,7 @@ function _buildProofPayload(row) {
     asset_id: row.result_asset_id || null,
     completed_at: new Date().toISOString(),
     pass_rate: 1.0,
-    submitter: 'evolver_heartbeat_deliver',
+    submitter: redactString('evolver_heartbeat_deliver'),
   };
 }
 
