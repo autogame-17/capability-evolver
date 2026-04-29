@@ -14,6 +14,7 @@ Recent security hardening in this branch includes:
 - `force update` disabled unless explicitly enabled
 - `skills_monitor` auto-install disabled unless explicitly enabled
 - hub-sourced persisted feature flags disabled unless explicitly enabled
+- auto issue reporting now omits sanitized log excerpts unless explicitly enabled
 - argv-based git/process execution in several modules to reduce shell injection risk
 
 ## Deployment Guidance

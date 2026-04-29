@@ -82,6 +82,14 @@ assert.ok(redactString('client_secret=aB3~cD4.eF5_gH6-iJ7').includes(REDACTED),
 // Application Insights instrumentation key
 assert.ok(redactString('InstrumentationKey=12345678-1234-1234-1234-1234567890ab').includes(REDACTED),
   'Azure instrumentationkey should be redacted');
+assert.ok(redactString('A2A_NODE_SECRET=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789').includes(REDACTED),
+  'node secret should be redacted');
+assert.ok(redactString('auth_token=abcdefghijklmnop1234567890').includes(REDACTED),
+  'auth token should be redacted');
+assert.ok(redactString('postgres://user:pass123@db.internal:5432/app').includes(REDACTED),
+  'database URL with credentials should be redacted');
+assert.ok(redactString('connect to 192.168.1.25:8080').includes(REDACTED),
+  'private IP should be redacted');
 
 // Discord bot token (uppercase leading char, three segments).
 // The sample is split and joined at runtime so static secret scanners do not
@@ -125,4 +133,4 @@ assert.strictEqual(sanitizePayload(undefined), undefined);
 assert.strictEqual(redactString(null), null);
 assert.strictEqual(redactString(123), 123);
 
-console.log('All sanitize tests passed (42 assertions)');
+console.log('All sanitize tests passed (46 assertions)');

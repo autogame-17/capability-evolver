@@ -33,6 +33,9 @@ const REDACT_PATTERNS = [
   // Azure AD client secret + App Insights instrumentation key (value only)
   /client_secret=[A-Za-z0-9~._\-]{8,}/gi,
   /instrumentationkey=[0-9a-fA-F-]{20,}/gi,
+  // Node / app secrets persisted in config-like text
+  /(?:A2A_NODE_SECRET|node_secret|auth_token|_authToken)[=:]\s*["']?[A-Za-z0-9\-._~+\/]{16,}["']?/gi,
+  /(?:session|cookie)[_ -]?id[=:]\s*["']?[A-Za-z0-9\-._~+\/]{12,}["']?/gi,
   // Discord bot tokens. Three base64url segments:
   //   1. 24+ chars starting with [MNO] (user-id snowflake, base64-encoded)
   //   2. exactly 6 chars (timestamp)
@@ -44,6 +47,8 @@ const REDACT_PATTERNS = [
   /-----BEGIN\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+)?PRIVATE\s+KEY-----[\s\S]*?-----END\s+(?:RSA\s+|EC\s+|DSA\s+|OPENSSH\s+)?PRIVATE\s+KEY-----/g,
   // Basic auth in URLs (redact only credentials, keep :// and @)
   /(?<=:\/\/)[^@\s]+:[^@\s]+(?=@)/g,
+  // Database / broker URLs with embedded credentials
+  /(?:mongodb|postgres|postgresql|mysql|redis|amqp):\/\/[^\s"',;)}\]]{10,}/gi,
   // Local filesystem paths
   /\/home\/[^\s"',;)}\]]+/g,
   /\/Users\/[^\s"',;)}\]]+/g,
@@ -52,6 +57,10 @@ const REDACT_PATTERNS = [
   /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
   // .env file references
   /\.env(?:\.[a-zA-Z]+)?/g,
+  // Common dotfiles containing credentials
+  /\.(?:npmrc|pypirc|netrc|aws\/credentials|ssh\/config)\b/gi,
+  // Internal/private IP addresses
+  /\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})(?::\d{2,5})?\b/g,
 ];
 
 const REDACTED = '[REDACTED]';

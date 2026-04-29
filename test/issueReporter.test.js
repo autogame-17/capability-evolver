@@ -19,7 +19,7 @@ function jsonResponse(body, status) {
 
 (async function run() {
   delete require.cache[MODULE_PATH];
-  const { findExistingIssue } = require('../src/gep/issueReporter');
+  const { findExistingIssue, buildIssueBody } = require('../src/gep/issueReporter');
 
   // Case 1: search returns matching open issue -> returns object
   await withFetchMock(async function (url, opts) {
@@ -139,6 +139,42 @@ function jsonResponse(body, status) {
     const result = await findExistingIssue('x/y', target, 'faketoken');
     assert.strictEqual(result, null, 'substring fallback must not match unrelated titles');
   });
+
+  // Case D: buildIssueBody hashes node id and omits logs unless explicitly enabled
+  const savedNodeId = process.env.A2A_NODE_ID;
+  const savedIssueLogs = process.env.EVOLVER_ISSUE_INCLUDE_LOGS;
+  process.env.A2A_NODE_ID = 'node_super_sensitive_identifier_123456';
+  delete process.env.EVOLVER_ISSUE_INCLUDE_LOGS;
+  try {
+    const body = buildIssueBody({
+      envFingerprint: {
+        evolver_version: '1.0.0',
+        node_version: 'v20.0.0',
+        platform: 'linux',
+        arch: 'x64',
+        hostname: 'private-hostname',
+        cwd: '/home/alice/private',
+      },
+      signals: ['failure_loop_detected', 'consecutive_failure_streak_7'],
+      recentEvents: [{
+        intent: 'repair /home/alice/private',
+        genes_used: ['gene_private'],
+        outcome: { status: 'failed', reason: 'token=secretvalue1234567890' },
+      }],
+      sessionLog: 'A2A_NODE_SECRET=abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+    });
+    assert.ok(body.includes('node:'), 'body should contain redacted node id');
+    assert.ok(!body.includes('node_super_sensitive_identifier_123456'), 'raw node id must not be included');
+    assert.ok(!body.includes('private-hostname'), 'raw hostname must not be included');
+    assert.ok(!body.includes('/home/alice/private'), 'local path should be redacted');
+    assert.ok(body.includes('_Log excerpt omitted by default.'), 'logs should be omitted by default');
+    assert.ok(!body.includes('A2A_NODE_SECRET='), 'secret should not appear in body');
+  } finally {
+    if (savedNodeId === undefined) delete process.env.A2A_NODE_ID;
+    else process.env.A2A_NODE_ID = savedNodeId;
+    if (savedIssueLogs === undefined) delete process.env.EVOLVER_ISSUE_INCLUDE_LOGS;
+    else process.env.EVOLVER_ISSUE_INCLUDE_LOGS = savedIssueLogs;
+  }
 
   console.log('issueReporter.test.js: OK');
 })().catch(function (err) {
