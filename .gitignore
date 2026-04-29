@@ -19,3 +19,4 @@ test/tmp/
 .evomap_node_id
 skills/
 logs/
+.eslintcache

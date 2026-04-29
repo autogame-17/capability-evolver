@@ -30,13 +30,22 @@
     "review": "node index.js review",
     "a2a:export": "node scripts/a2a_export.js",
     "a2a:ingest": "node scripts/a2a_ingest.js",
-    "a2a:promote": "node scripts/a2a_promote.js"
+    "a2a:promote": "node scripts/a2a_promote.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
-    "javascript-obfuscator": "^5.4.1"
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.2.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "javascript-obfuscator": "^5.4.1",
+    "prettier": "^3.8.3"
   },
   "files": [
     "assets/",
