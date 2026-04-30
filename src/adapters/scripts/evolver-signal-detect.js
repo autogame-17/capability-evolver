@@ -38,8 +38,14 @@ function main() {
     handled = true;
     try {
       const input = inputData.trim() ? JSON.parse(inputData) : {};
-      const content = input.content || input.file_content || input.diff || '';
-      const filePath = input.path || input.file_path || '';
+      // Claude Code's PostToolUse payload nests tool args under tool_input.
+      // Older/raw shapes put them at the top level; support both.
+      const ti = input.tool_input || {};
+      const tr = input.tool_response || {};
+      const content = ti.content || ti.new_string || ti.file_content
+        || input.content || input.file_content || input.diff || '';
+      const filePath = ti.file_path || tr.filePath
+        || input.path || input.file_path || '';
 
       const signals = detectSignals(content);
 
