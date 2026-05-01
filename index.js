@@ -1028,6 +1028,7 @@ async function main() {
   } else if (command === 'sync') {
     const { getHubUrl, getNodeId, buildHubHeaders, sendHelloToHub, getHubNodeSecret } = require('./src/gep/a2aProtocol');
     const { upsertGene, upsertCapsule, loadGenes, loadCapsules } = require('./src/gep/assetStore');
+    const { getGepAssetsDir, getMemoryDir } = require('./src/gep/paths');
 
     const hubUrl = getHubUrl();
     if (!hubUrl) {
@@ -1052,51 +1053,91 @@ async function main() {
         const f = args.find(function (a) { return typeof a === 'string' && a.startsWith('--type='); });
         return f ? f.slice('--type='.length) : null;
       })();
+      const scopeArg = (function () {
+        const f = args.find(function (a) { return typeof a === 'string' && a.startsWith('--scope='); });
+        return f ? f.slice('--scope='.length) : 'all';
+      })();
+      const statusFilter = (function () {
+        const f = args.find(function (a) { return typeof a === 'string' && a.startsWith('--status='); });
+        return f ? f.slice('--status='.length) : null;
+      })();
+      const exportPath = (function () {
+        const f = args.find(function (a) { return typeof a === 'string' && a.startsWith('--export='); });
+        return f ? f.slice('--export='.length) : null;
+      })();
       const dryRun = args.includes('--dry-run');
+      const listUnpublished = !args.includes('--no-unpublished-list');
       const limitPerPage = 100;
 
-      console.log('[sync] Fetching purchased assets from Hub...');
-      let allAssets = [];
-      let cursor = null;
-      let page = 0;
+      const validScopes = new Set(['all', 'purchased', 'published']);
+      if (!validScopes.has(scopeArg)) {
+        console.error('[sync] Invalid --scope=' + scopeArg + '. Expected: all, purchased, published.');
+        process.exit(1);
+      }
+      const doPurchased = scopeArg === 'all' || scopeArg === 'purchased';
+      const doPublished = scopeArg === 'all' || scopeArg === 'published';
 
-      while (true) {
-        page++;
-        let url = baseUrl + '/a2a/assets/purchased?node_id=' + encodeURIComponent(nodeId) + '&limit=' + limitPerPage;
-        if (cursor) url += '&cursor=' + encodeURIComponent(cursor);
-        if (typeFilter) url += '&type=' + encodeURIComponent(typeFilter);
-
-        const resp = await fetch(url, {
-          method: 'GET',
-          headers: buildHubHeaders(),
-          signal: AbortSignal.timeout(30000),
-        });
-
-        if (!resp.ok) {
-          const body = await resp.text().catch(function () { return ''; });
-          console.error('[sync] Hub returned HTTP ' + resp.status + ': ' + body.slice(0, 500));
-          process.exit(1);
+      async function fetchAllPages(endpoint, extraParams) {
+        const out = [];
+        let cursor = null;
+        let page = 0;
+        while (true) {
+          page++;
+          let url = baseUrl + endpoint + '?node_id=' + encodeURIComponent(nodeId) + '&limit=' + limitPerPage;
+          if (cursor) url += '&cursor=' + encodeURIComponent(cursor);
+          if (typeFilter) url += '&type=' + encodeURIComponent(typeFilter);
+          if (extraParams) {
+            for (const [k, v] of Object.entries(extraParams)) {
+              if (v != null) url += '&' + k + '=' + encodeURIComponent(v);
+            }
+          }
+          const resp = await fetch(url, {
+            method: 'GET',
+            headers: buildHubHeaders(),
+            signal: AbortSignal.timeout(30000),
+          });
+          if (!resp.ok) {
+            const body = await resp.text().catch(function () { return ''; });
+            throw new Error('Hub HTTP ' + resp.status + ' on ' + endpoint + ': ' + body.slice(0, 500));
+          }
+          const data = await resp.json();
+          if (Array.isArray(data.assets)) out.push.apply(out, data.assets);
+          if (isVerbose) console.log('[sync]   ' + endpoint + ' page ' + page + ': ' + (data.count || 0) + ' (total ' + out.length + ')');
+          if (data.has_more && data.next_cursor) cursor = data.next_cursor;
+          else break;
         }
+        return out;
+      }
 
-        const data = await resp.json();
-        if (Array.isArray(data.assets)) {
-          allAssets = allAssets.concat(data.assets);
-        }
-        if (isVerbose) console.log('[sync] Page ' + page + ': ' + (data.count || 0) + ' assets (total so far: ' + allAssets.length + ')');
+      let purchasedAssets = [];
+      let publishedAssets = [];
 
-        if (data.has_more && data.next_cursor) {
-          cursor = data.next_cursor;
-        } else {
-          break;
+      if (doPurchased) {
+        console.log('[sync] Fetching purchased assets from Hub...');
+        purchasedAssets = await fetchAllPages('/a2a/assets/purchased');
+        console.log('[sync]   purchased: ' + purchasedAssets.length + ' asset(s)');
+      }
+      if (doPublished) {
+        console.log('[sync] Fetching published-by-me assets from Hub (includes drafts)...');
+        publishedAssets = await fetchAllPages('/a2a/assets/published-by-me', { status: statusFilter });
+        console.log('[sync]   published: ' + publishedAssets.length + ' asset(s)');
+      }
+
+      const seen = new Set();
+      const allAssets = [];
+      for (const src of [purchasedAssets, publishedAssets]) {
+        for (const asset of src) {
+          if (!asset || !asset.asset_id) continue;
+          if (seen.has(asset.asset_id)) continue;
+          seen.add(asset.asset_id);
+          allAssets.push(asset);
         }
       }
 
-      if (allAssets.length === 0) {
-        console.log('[sync] No purchased assets found on Hub.');
+      if (allAssets.length === 0 && !exportPath) {
+        console.log('[sync] No assets to sync.');
         process.exit(0);
       }
-
-      console.log('[sync] Found ' + allAssets.length + ' purchased asset(s). Syncing to local store...');
 
       const existingGenes = loadGenes();
       const existingCapsules = loadCapsules();
@@ -1110,19 +1151,14 @@ async function main() {
       for (const asset of allAssets) {
         const assetId = asset.asset_id;
         const assetType = asset.asset_type;
+        const localId = asset.local_id || assetId;
 
-        if (assetType === 'Gene' && localGeneIds.has(asset.local_id || assetId)) {
-          skipped++;
-          continue;
-        }
-        if (assetType === 'Capsule' && localCapsuleIds.has(asset.local_id || assetId)) {
-          skipped++;
-          continue;
-        }
         if (assetType !== 'Gene' && assetType !== 'Capsule') {
           skipped++;
           continue;
         }
+        if (assetType === 'Gene' && localGeneIds.has(localId)) { skipped++; continue; }
+        if (assetType === 'Capsule' && localCapsuleIds.has(localId)) { skipped++; continue; }
 
         if (dryRun) {
           console.log('  [dry-run] Would sync: ' + assetType + ' ' + assetId);
@@ -1131,31 +1167,32 @@ async function main() {
         }
 
         try {
-          const detailResp = await fetch(baseUrl + '/a2a/assets/' + encodeURIComponent(assetId) + '?detailed=true', {
-            method: 'GET',
-            headers: buildHubHeaders(),
-            signal: AbortSignal.timeout(15000),
-          });
-
-          if (!detailResp.ok) {
-            if (isVerbose) console.warn('  [sync] Failed to fetch detail for ' + assetId + ' (HTTP ' + detailResp.status + ')');
-            fetchErrors++;
-            continue;
+          let payload = asset.payload;
+          if (!payload) {
+            const detailResp = await fetch(baseUrl + '/a2a/assets/' + encodeURIComponent(assetId) + '?detailed=true', {
+              method: 'GET',
+              headers: buildHubHeaders(),
+              signal: AbortSignal.timeout(15000),
+            });
+            if (!detailResp.ok) {
+              if (isVerbose) console.warn('  [sync] Failed to fetch detail for ' + assetId + ' (HTTP ' + detailResp.status + ')');
+              fetchErrors++;
+              continue;
+            }
+            const detail = await detailResp.json();
+            payload = detail.payload || {};
           }
-
-          const detail = await detailResp.json();
-          const payload = detail.payload || {};
 
           if (assetType === 'Gene') {
             const geneObj = {
               type: 'Gene',
-              id: payload.id || asset.local_id || assetId,
+              id: payload.id || localId,
               category: payload.category || 'unknown',
               signals: Array.isArray(payload.signals) ? payload.signals : [],
               strategy: Array.isArray(payload.strategy) ? payload.strategy : [],
               avoid: Array.isArray(payload.avoid) ? payload.avoid : [],
               validation: payload.validation || {},
-              summary: payload.summary || detail.summary || asset.summary || '',
+              summary: payload.summary || asset.summary || '',
               hub_asset_id: assetId,
               synced_at: new Date().toISOString(),
             };
@@ -1164,12 +1201,12 @@ async function main() {
           } else {
             const capsuleObj = {
               type: 'Capsule',
-              id: payload.id || asset.local_id || assetId,
+              id: payload.id || localId,
               gene: payload.gene || null,
               genes_used: Array.isArray(payload.genes_used) ? payload.genes_used : [],
               outcome: payload.outcome || {},
               execution_trace: payload.execution_trace || {},
-              summary: payload.summary || detail.summary || asset.summary || '',
+              summary: payload.summary || asset.summary || '',
               hub_asset_id: assetId,
               synced_at: new Date().toISOString(),
             };
@@ -1183,8 +1220,58 @@ async function main() {
         }
       }
 
-      console.log('[sync] Done. synced=' + synced + ' skipped=' + skipped + ' errors=' + fetchErrors);
+      console.log('[sync] Done. scope=' + scopeArg + ' synced=' + synced + ' skipped=' + skipped + ' errors=' + fetchErrors);
       if (dryRun) console.log('[sync] (dry-run mode: no files were modified)');
+
+      if (listUnpublished && doPublished) {
+        const hubGeneIds = new Set();
+        const hubCapsuleIds = new Set();
+        for (const a of publishedAssets) {
+          const lid = a.local_id || a.asset_id;
+          if (a.asset_type === 'Gene') hubGeneIds.add(lid);
+          else if (a.asset_type === 'Capsule') hubCapsuleIds.add(lid);
+        }
+        const unpublishedGenes = existingGenes.filter(function (g) {
+          return g && g.id && !hubGeneIds.has(g.id) && !g.hub_asset_id;
+        });
+        const unpublishedCapsules = existingCapsules.filter(function (c) {
+          return c && c.id && !hubCapsuleIds.has(c.id) && !c.hub_asset_id;
+        });
+        if (unpublishedGenes.length || unpublishedCapsules.length) {
+          console.log('[sync] Local-only (not on Hub): genes=' + unpublishedGenes.length + ' capsules=' + unpublishedCapsules.length);
+          if (isVerbose) {
+            for (const g of unpublishedGenes.slice(0, 20)) console.log('    gene: ' + g.id);
+            for (const c of unpublishedCapsules.slice(0, 20)) console.log('    capsule: ' + c.id);
+            if (unpublishedGenes.length + unpublishedCapsules.length > 40) {
+              console.log('    ... (truncated; use --export=<path>.gepx to bundle all)');
+            }
+          }
+        }
+      }
+
+      if (exportPath) {
+        if (dryRun) {
+          console.log('[sync] [dry-run] Would export to ' + exportPath);
+        } else {
+          const { exportGepx } = require('./src/gep/portable');
+          const assetsDir = getGepAssetsDir();
+          const memoryGraphPath = require('path').join(getMemoryDir(), 'memory_graph.jsonl');
+          try {
+            const result = exportGepx({
+              assetsDir,
+              memoryGraphPath,
+              outputPath: exportPath,
+              agentId: nodeId,
+              agentName: process.env.AGENT_NAME || 'evolver',
+            });
+            console.log('[sync] Exported .gepx -> ' + result.outputPath);
+            console.log('[sync]   stats: ' + JSON.stringify(result.manifest.statistics));
+          } catch (exportErr) {
+            console.error('[sync] Export failed: ' + (exportErr && exportErr.message || exportErr));
+            process.exit(1);
+          }
+        }
+      }
     } catch (error) {
       if (error && error.name === 'TimeoutError') {
         console.error('[sync] Request timed out. Check your network and A2A_HUB_URL.');
@@ -1343,8 +1430,12 @@ async function main() {
     - --skill=<id> | -s <id>   (skill ID to download)
     - --out=<dir>              (output directory, default: ./skills/<skill_id>)
   - sync flags:
-    - --type=Gene|Capsule      (filter by asset type)
-    - --dry-run                (preview without writing to local store)
+    - --scope=all|purchased|published   (default: all)
+    - --type=Gene|Capsule               (filter by asset type)
+    - --status=draft,promoted,all       (only for published scope; default promoted+draft)
+    - --export=<path.gepx>              (also bundle local assets into a .gepx archive)
+    - --no-unpublished-list             (suppress local-only asset list)
+    - --dry-run                         (preview without writing to local store)
   - solidify flags:
     - --dry-run
     - --no-rollback
