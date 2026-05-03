@@ -359,6 +359,20 @@ This repo includes a protocol-constrained prompt mode based on [GEP (Genome Evol
 - **Selector** logic uses extracted signals to prefer existing Genes/Capsules and emits a JSON selector decision in the prompt.
 - **Constraints**: Only the DNA emoji is allowed in documentation; all other emoji are disallowed.
 
+### Your local asset store is never overwritten by upgrades
+
+`assets/gep/genes.json`, `assets/gep/capsules.json`, and `assets/gep/events.jsonl` are owned by your runtime. Starting with 1.78.3, the npm tarball no longer contains these files, so `npm i -g @evomap/evolver` (or `git pull` of the public repo) never clobbers your accumulated Genes, Capsules, or EvolutionEvents. New installs still receive the curated starter Genes through `assets/gep/genes.seed.json`, which is applied only when `genes.json` is absent.
+
+If you ran an older evolver version that wiped your local assets, pull back everything you Promoted or published to the Hub with a single command:
+
+```bash
+A2A_HUB_URL=https://evomap.ai evolver sync --scope=all --export=backup.gepx
+```
+
+This hits `/a2a/assets/purchased` (Promoted-to-you plus self-purchased) and `/a2a/assets/published-by-me` (your own drafts and published assets), re-materializes the full payloads into `genes.json` / `capsules.json`, and packs a portable `.gepx` bundle. Previously-purchased payloads re-fetch at zero cost.
+
+Purely local assets that were never uploaded to the Hub have no remote copy -- recover them from your git history (for example `git show <old_tag>:assets/gep/genes.json > restored.json`) or from disk snapshots.
+
 ## Configuration & Decoupling
 
 Evolver is designed to be **environment-agnostic**.

@@ -167,6 +167,7 @@ function getDefaultGenes() {
 
 function getDefaultCapsules() { return { version: 1, capsules: [] }; }
 function genesPath() { return path.join(getGepAssetsDir(), 'genes.json'); }
+function genesSeedPath() { return path.join(getGepAssetsDir(), 'genes.seed.json'); }
 function capsulesPath() { return path.join(getGepAssetsDir(), 'capsules.json'); }
 function capsulesJsonlPath() { return path.join(getGepAssetsDir(), 'capsules.jsonl'); }
 function eventsPath() { return path.join(getGepAssetsDir(), 'events.jsonl'); }
@@ -174,7 +175,28 @@ function candidatesPath() { return path.join(getGepAssetsDir(), 'candidates.json
 function externalCandidatesPath() { return path.join(getGepAssetsDir(), 'external_candidates.jsonl'); }
 function failedCapsulesPath() { return path.join(getGepAssetsDir(), 'failed_capsules.json'); }
 
+// First-run seeding: if the user has no local genes.json yet, copy the
+// shipped genes.seed.json into place so they start with the curated
+// starter genes. Once genes.json exists, it is owned by the user and the
+// seed is never re-applied -- this is what keeps `npm i -g @evomap/evolver`
+// upgrades from wiping the user's accumulated asset store. See the
+// 2026-05-03 regression report from Ruan Chengtao.
+function ensureGenesSeeded() {
+  const target = genesPath();
+  if (fs.existsSync(target)) return;
+  const seed = genesSeedPath();
+  if (!fs.existsSync(seed)) return;
+  try {
+    ensureDir(path.dirname(target));
+    fs.copyFileSync(seed, target);
+    console.log('[AssetStore] Seeded ' + target + ' from genes.seed.json');
+  } catch (e) {
+    console.warn('[AssetStore] Failed to seed genes.json from seed:', e && e.message || e);
+  }
+}
+
 function loadGenes() {
+  ensureGenesSeeded();
   const jsonGenes = readJsonIfExists(genesPath(), getDefaultGenes()).genes || [];
   const jsonlGenes = [];
   try {
@@ -348,6 +370,7 @@ function ensureSchemaFields(obj) {
 
 function upsertGene(geneObj) {
   ensureSchemaFields(geneObj);
+  ensureGenesSeeded();
   return withFileLock(genesPath(), () => {
     const current = readJsonIfExists(genesPath(), getDefaultGenes());
     const genes = Array.isArray(current.genes) ? current.genes : [];
@@ -416,6 +439,7 @@ function readRecentFailedCapsules(limit) {
 function ensureAssetFiles() {
   const dir = getGepAssetsDir();
   ensureDir(dir);
+  ensureGenesSeeded();
   const files = [
     { path: genesPath(), defaultContent: JSON.stringify(getDefaultGenes(), null, 2) + '\n' },
     { path: capsulesPath(), defaultContent: JSON.stringify(getDefaultCapsules(), null, 2) + '\n' },
@@ -443,6 +467,7 @@ module.exports = {
   upsertGene, appendCapsule, upsertCapsule,
   appendFailedCapsule, readRecentFailedCapsules,
   genesPath, capsulesPath, eventsPath, candidatesPath, externalCandidatesPath, failedCapsulesPath,
+  genesSeedPath, ensureGenesSeeded,
   ensureAssetFiles, buildValidationCmd,
   withFileLock,
 };
