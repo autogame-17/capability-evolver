@@ -104,6 +104,42 @@ function parseMs(v, fallback) {
   return fallback;
 }
 
+function parseBoolEnv(v, fallback) {
+  if (v == null) return fallback;
+  const s = String(v).toLowerCase().trim();
+  if (s === '' ) return fallback;
+  if (s === 'false' || s === '0' || s === 'off' || s === 'no') return false;
+  if (s === 'true' || s === '1' || s === 'on' || s === 'yes') return true;
+  return fallback;
+}
+
+class CycleTimeoutError extends Error {
+  constructor(timeoutMs, phase, cycleNum) {
+    super('Cycle hard-timeout exceeded after ' + timeoutMs + 'ms (cycle=' + cycleNum + ', phase=' + phase + ')');
+    this.name = 'CycleTimeoutError';
+    this.code = 'CYCLE_TIMEOUT';
+    this.timeoutMs = timeoutMs;
+    this.phase = phase;
+    this.cycleNum = cycleNum;
+  }
+}
+
+// Atomic write of the cycle_progress.json file. Wrapper polls this file every
+// 60s; if updated_at goes stale beyond EVOLVE_INNER_STUCK_TIMEOUT_SEC the
+// wrapper treats the inner core as zombie and SIGKILLs it. See Issue #19 (the
+// 22-day stuck-cycle incident) and the cross-repo timeout plan for context.
+function writeCycleProgressAtomic(progressPath, fields) {
+  try {
+    const data = Object.assign({}, fields, { updated_at: Date.now() });
+    const tmp = progressPath + '.tmp.' + process.pid;
+    fs.writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf8');
+    fs.renameSync(tmp, progressPath);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 function getLastSignals(statePath) {
   try {
     const st = readJsonSafe(statePath);
@@ -255,6 +291,7 @@ async function main() {
 
         const { getEvolutionDir, getEvolverLogPath } = require('./src/gep/paths');
         const solidifyStatePath = path.join(getEvolutionDir(), 'evolution_solidify_state.json');
+        const cycleProgressPath = path.join(getEvolutionDir(), 'cycle_progress.json');
 
         const minSleepMs = parseMs(process.env.EVOLVER_MIN_SLEEP_MS, 2000);
         const maxSleepMs = parseMs(process.env.EVOLVER_MAX_SLEEP_MS, 300000);
@@ -269,6 +306,15 @@ async function main() {
         const maxCyclesPerProcess = parseMs(process.env.EVOLVER_MAX_CYCLES_PER_PROCESS, 100) || 100;
         const maxRssMb = parseMs(process.env.EVOLVER_MAX_RSS_MB, 500) || 500;
         const suicideEnabled = String(process.env.EVOLVER_SUICIDE || '').toLowerCase() !== 'false';
+
+        // Issue #19: hard timeout around evolve.run() to break out of zombie
+        // cycles (e.g. unclosed socket / stuck LLM call). On timeout we throw
+        // CycleTimeoutError, log diagnostic stderr, and force suicide-respawn
+        // so the wrapper sees a fresh PID + cycle. Also write cycle_progress
+        // every progressUpdateMs so the wrapper has a true heartbeat to poll.
+        const cycleTimeoutEnabled = parseBoolEnv(process.env.EVOLVER_CYCLE_TIMEOUT_ENABLED, true);
+        const cycleTimeoutMs = parseMs(process.env.EVOLVER_CYCLE_TIMEOUT_MS, 2700000); // 45 min default
+        const progressUpdateMs = parseMs(process.env.EVOLVER_PROGRESS_UPDATE_MS, 60000); // 1 min default
 
         // Start hub heartbeat (keeps node alive independently of evolution cycles)
         try {
@@ -388,8 +434,46 @@ async function main() {
 
           const t0 = Date.now();
           let ok = false;
+          // Issue #19: write progress at cycle start, refresh it every
+          // progressUpdateMs (default 60s) while evolve.run() is active, and
+          // wrap evolve.run() with Promise.race(timeout) so a hung internal
+          // call cannot freeze the daemon for days.
+          writeCycleProgressAtomic(cycleProgressPath, {
+            pid: process.pid,
+            outer_cycle: cycleCount,
+            inner_cycle: cycleCount,
+            started_at: t0,
+            phase: 'evolve.run',
+          });
+          let progressTicker = null;
+          if (progressUpdateMs > 0) {
+            progressTicker = setInterval(function () {
+              writeCycleProgressAtomic(cycleProgressPath, {
+                pid: process.pid,
+                outer_cycle: cycleCount,
+                inner_cycle: cycleCount,
+                started_at: t0,
+                phase: 'evolve.run',
+              });
+            }, progressUpdateMs);
+            if (typeof progressTicker.unref === 'function') progressTicker.unref();
+          }
+          let cycleTimeoutHandle = null;
+          let cycleTimedOut = false;
           try {
-            await evolve.run();
+            const evolvePromise = evolve.run();
+            if (cycleTimeoutEnabled && cycleTimeoutMs > 0) {
+              const timeoutPromise = new Promise(function (_, reject) {
+                cycleTimeoutHandle = setTimeout(function () {
+                  cycleTimedOut = true;
+                  reject(new CycleTimeoutError(cycleTimeoutMs, 'evolve.run', cycleCount));
+                }, cycleTimeoutMs);
+                if (cycleTimeoutHandle && typeof cycleTimeoutHandle.unref === 'function') cycleTimeoutHandle.unref();
+              });
+              await Promise.race([evolvePromise, timeoutPromise]);
+            } else {
+              await evolvePromise;
+            }
             ok = true;
 
             if (String(process.env.EVOLVE_BRIDGE || '').toLowerCase() === 'false') {
@@ -403,7 +487,37 @@ async function main() {
             }
           } catch (error) {
             const msg = error && error.message ? String(error.message) : String(error);
+            if (error && error.code === 'CYCLE_TIMEOUT') {
+              console.error('[Daemon] ' + msg);
+              if (progressTicker) { clearInterval(progressTicker); progressTicker = null; }
+              if (cycleTimeoutHandle) { clearTimeout(cycleTimeoutHandle); cycleTimeoutHandle = null; }
+              writeCycleProgressAtomic(cycleProgressPath, {
+                pid: process.pid,
+                outer_cycle: cycleCount,
+                inner_cycle: cycleCount,
+                started_at: t0,
+                phase: 'cycle_timeout_respawn',
+              });
+              try {
+                const logFd = fs.openSync(getEvolverLogPath(), 'a');
+                const spawnOpts = {
+                  detached: true,
+                  stdio: ['ignore', logFd, logFd],
+                  env: process.env,
+                  windowsHide: true,
+                };
+                const child = spawn(process.execPath, [__filename, ...args], spawnOpts);
+                child.unref();
+              } catch (spawnErr) {
+                console.error('[Daemon] Force-restart spawn after cycle timeout failed: ' + (spawnErr && spawnErr.message || spawnErr));
+              }
+              releaseLock();
+              process.exit(1);
+            }
             console.error(`Evolution cycle failed: ${msg}`);
+          } finally {
+            if (progressTicker) { clearInterval(progressTicker); progressTicker = null; }
+            if (cycleTimeoutHandle) { clearTimeout(cycleTimeoutHandle); cycleTimeoutHandle = null; }
           }
           const dt = Date.now() - t0;
 
@@ -496,6 +610,13 @@ async function main() {
             const signals = getLastSignals(solidifyStatePath).join(',');
             console.log(`[Verbose] cycle=${cycleCount} ok=${ok} dt=${dt}ms sleep=${totalSleepMs}ms (base=${currentSleepMs} jitter=${jitter} sat=${saturationMultiplier}x) rss=${memMb}MB signals=[${signals}]`);
           }
+          writeCycleProgressAtomic(cycleProgressPath, {
+            pid: process.pid,
+            outer_cycle: cycleCount,
+            inner_cycle: cycleCount,
+            started_at: t0,
+            phase: 'sleep',
+          });
           await sleepMs(totalSleepMs);
 
           } catch (loopErr) {
@@ -1581,4 +1702,7 @@ module.exports = {
   readJsonSafe,
   rejectPendingRun,
   isPendingSolidify,
+  parseBoolEnv,
+  CycleTimeoutError,
+  writeCycleProgressAtomic,
 };

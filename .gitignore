@@ -9,6 +9,8 @@ assets/gep/genes.jsonl
 assets/gep/capsules.jsonl
 assets/gep/a2a/
 dist-public/
+dist-binaries/
+.binary-stage/
 
 # Docker / vibe testing
 test/tmp/
