@@ -124,6 +124,43 @@ class CycleTimeoutError extends Error {
   }
 }
 
+// Issue #528: on Windows, child_process.spawn(detached: true, windowsHide: true)
+// allocates a new conhost window every time -- windowsHide is silently ignored
+// in detached mode. So suicide-respawn (cycles >= max, RSS over budget, or the
+// new cycle hard-timeout) opens a new cmd popup on every restart. We now skip
+// the in-process detached spawn on Windows by default and rely on an external
+// supervisor (feishu-evolver-wrapper >= 1.10.0, NSSM, pm2-windows, etc.) to
+// respawn the daemon on non-zero exit. Users who insist can opt back in with
+// EVOLVER_SUICIDE_WINDOWS=true (and accept the popups).
+function spawnReplacementProcess({ reason, args, logPath }) {
+  const isWindows = process.platform === 'win32';
+  const allowOnWindows = parseBoolEnv(process.env.EVOLVER_SUICIDE_WINDOWS, false);
+  if (isWindows && !allowOnWindows) {
+    console.log(
+      '[Daemon] Skipping in-process respawn on Windows (' + reason + '). ' +
+      'Native Node spawn(detached, windowsHide) opens a cmd popup on every restart (Issue #528). ' +
+      'Set EVOLVER_SUICIDE_WINDOWS=true to opt back in. ' +
+      'Recommended: run evolver under feishu-evolver-wrapper >= 1.10.0, NSSM, or pm2-windows so the supervisor restarts on exit.'
+    );
+    return { spawned: false, reason: 'windows_default_skip' };
+  }
+  try {
+    const logFd = fs.openSync(logPath, 'a');
+    const spawnOpts = {
+      detached: true,
+      stdio: ['ignore', logFd, logFd],
+      env: process.env,
+      windowsHide: true,
+    };
+    const child = spawn(process.execPath, [__filename, ...args], spawnOpts);
+    child.unref();
+    return { spawned: true };
+  } catch (e) {
+    console.error('[Daemon] Spawn-replacement failed (' + reason + '): ' + (e && e.message || e));
+    return { spawned: false, reason: 'spawn_error', error: e };
+  }
+}
+
 // Atomic write of the cycle_progress.json file. Wrapper polls this file every
 // 60s; if updated_at goes stale beyond EVOLVE_INNER_STUCK_TIMEOUT_SEC the
 // wrapper treats the inner core as zombie and SIGKILLs it. See Issue #19 (the
@@ -498,19 +535,11 @@ async function main() {
                 started_at: t0,
                 phase: 'cycle_timeout_respawn',
               });
-              try {
-                const logFd = fs.openSync(getEvolverLogPath(), 'a');
-                const spawnOpts = {
-                  detached: true,
-                  stdio: ['ignore', logFd, logFd],
-                  env: process.env,
-                  windowsHide: true,
-                };
-                const child = spawn(process.execPath, [__filename, ...args], spawnOpts);
-                child.unref();
-              } catch (spawnErr) {
-                console.error('[Daemon] Force-restart spawn after cycle timeout failed: ' + (spawnErr && spawnErr.message || spawnErr));
-              }
+              spawnReplacementProcess({
+                reason: 'cycle_hard_timeout',
+                args: args,
+                logPath: getEvolverLogPath(),
+              });
               releaseLock();
               process.exit(1);
             }
@@ -565,25 +594,32 @@ async function main() {
             if (isVerbose) console.warn('[OMLS] Scheduler error: ' + (e.message || e));
           }
 
-          // Suicide check (memory leak protection)
+          // Suicide check (memory leak protection). On Windows the
+          // in-process respawn opens a cmd popup (Issue #528), so by default
+          // we delegate to an external supervisor by exiting with a non-zero
+          // code instead. See spawnReplacementProcess() for the policy.
           if (suicideEnabled) {
             const memMb = process.memoryUsage().rss / 1024 / 1024;
             if (cycleCount >= maxCyclesPerProcess || memMb > maxRssMb) {
               console.log(`[Daemon] Restarting self (cycles=${cycleCount}, rssMb=${memMb.toFixed(0)})`);
-              try {
-                const logFd = fs.openSync(getEvolverLogPath(), 'a');
-                const spawnOpts = {
-                  detached: true,
-                  stdio: ['ignore', logFd, logFd],
-                  env: process.env,
-                  windowsHide: true,
-                };
-                const child = spawn(process.execPath, [__filename, ...args], spawnOpts);
-                child.unref();
+              const result = spawnReplacementProcess({
+                reason: 'max_cycles_or_rss',
+                args: args,
+                logPath: getEvolverLogPath(),
+              });
+              if (result.spawned) {
                 releaseLock();
                 process.exit(0);
-              } catch (spawnErr) {
-                console.error('[Daemon] Spawn failed, continuing current process:', spawnErr.message);
+              } else if (result.reason === 'windows_default_skip') {
+                console.log('[Daemon] Exiting with code 1 to let external supervisor respawn.');
+                releaseLock();
+                process.exit(1);
+              } else {
+                // Non-Windows spawn error: keep the lock and fall through to
+                // the next iteration of the loop instead of leaving the daemon
+                // dead. This matches the pre-1.79.1 behavior where a failed
+                // spawn was logged and the process continued running.
+                console.error('[Daemon] Spawn failed, continuing current process.');
               }
             }
           }
@@ -1705,4 +1741,5 @@ module.exports = {
   parseBoolEnv,
   CycleTimeoutError,
   writeCycleProgressAtomic,
+  spawnReplacementProcess,
 };

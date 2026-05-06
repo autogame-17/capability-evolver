@@ -1,0 +1,201 @@
+{
+  "version": 2,
+  "genes": [
+    {
+      "type": "Gene",
+      "id": "gene_gep_repair_from_errors",
+      "category": "repair",
+      "signals_match": [
+        "error",
+        "exception",
+        "failed",
+        "unstable"
+      ],
+      "preconditions": [
+        "signals contains error-related indicators"
+      ],
+      "strategy": [
+        "Extract structured signals from logs and user instructions",
+        "Select an existing Gene by signals match (no improvisation)",
+        "Estimate blast radius (files, lines) before editing",
+        "Apply smallest reversible patch",
+        "Validate using declared validation steps; rollback on failure",
+        "Solidify knowledge: append EvolutionEvent, update Gene/Capsule store"
+      ],
+      "constraints": {
+        "max_files": 20,
+        "forbidden_paths": [
+          ".git",
+          "node_modules"
+        ]
+      },
+      "validation": [
+        "node scripts/validate-modules.js ./src/evolve ./src/gep/solidify ./src/gep/policyCheck ./src/gep/selector ./src/gep/memoryGraph ./src/gep/assetStore",
+        "node scripts/validate-suite.js"
+      ]
+    },
+    {
+      "type": "Gene",
+      "id": "gene_gep_optimize_prompt_and_assets",
+      "category": "optimize",
+      "signals_match": [
+        "protocol",
+        "gep",
+        "prompt",
+        "audit",
+        "reusable"
+      ],
+      "preconditions": [
+        "need stricter, auditable evolution protocol outputs"
+      ],
+      "strategy": [
+        "Extract signals and determine selection rationale via Selector JSON",
+        "Prefer reusing existing Gene/Capsule; only create if no match exists",
+        "Refactor prompt assembly to embed assets (genes, capsules, parent event)",
+        "Reduce noise and ambiguity; enforce strict output schema",
+        "Validate by running node index.js run and ensuring no runtime errors",
+        "Solidify: record EvolutionEvent, update Gene definitions, create Capsule on success"
+      ],
+      "constraints": {
+        "max_files": 20,
+        "forbidden_paths": [
+          ".git",
+          "node_modules"
+        ]
+      },
+      "validation": [
+        "node scripts/validate-modules.js ./src/evolve ./src/gep/prompt ./src/gep/contentHash ./src/gep/skillDistiller",
+        "node scripts/validate-suite.js"
+      ]
+    },
+    {
+      "type": "Gene",
+      "id": "gene_gep_innovate_from_opportunity",
+      "category": "innovate",
+      "signals_match": [
+        "user_feature_request",
+        "user_improvement_suggestion",
+        "perf_bottleneck",
+        "capability_gap",
+        "stable_success_plateau",
+        "external_opportunity",
+        "bounty_task"
+      ],
+      "preconditions": [
+        "at least one opportunity signal is present",
+        "no active log_error signals (stability first)"
+      ],
+      "strategy": [
+        "Extract opportunity signals and identify the specific user need or system gap",
+        "Search existing Genes and Capsules for partial matches (avoid reinventing)",
+        "Design a minimal, testable implementation plan (prefer small increments)",
+        "Estimate blast radius; innovate changes may touch more files but must stay within constraints",
+        "Implement the change with clear validation criteria",
+        "Validate using declared validation steps; rollback on failure",
+        "Solidify: record EvolutionEvent with intent=innovate, create new Gene if pattern is novel, create Capsule on success"
+      ],
+      "constraints": {
+        "max_files": 25,
+        "forbidden_paths": [
+          ".git",
+          "node_modules"
+        ]
+      },
+      "validation": [
+        "node scripts/validate-modules.js ./src/evolve ./src/gep/solidify ./src/gep/policyCheck ./src/gep/mutation ./src/gep/personality",
+        "node scripts/validate-suite.js"
+      ]
+    },
+    {
+      "type": "Gene",
+      "id": "gene_gep_optimize_tool_usage",
+      "summary": "Optimize tool execution patterns by reducing redundant exec calls, improving tool selection strategy, and enforcing tool-use constraints to prevent bypass.",
+      "category": "optimize",
+      "signals_match": [
+        "high_tool_usage:exec",
+        "repeated_tool_usage:exec",
+        "tool_bypass",
+        "tool_loop",
+        "high_tool_usage"
+      ],
+      "preconditions": [
+        "agent repeatedly invokes the same tool (especially exec) without progress",
+        "tool execution bypass patterns detected",
+        "no active error signals (errors would take repair priority)"
+      ],
+      "strategy": [
+        "Analyze tool usage patterns to identify the root cause of repetition (wrong tool, missing context, or lack of guardrails)",
+        "Introduce strategy-level guardrails: prefer single-shot commands, batch related operations, add explicit retry limits",
+        "If tool_bypass detected, strengthen constraint enforcement in prompt assembly or tool routing",
+        "Estimate blast radius; changes should target tool routing, prompt constraints, or signal deduplication logic",
+        "Validate by confirming no regressions in existing tool tests and signal extraction accuracy",
+        "Solidify: record EvolutionEvent with intent=optimize, update Capsule on success"
+      ],
+      "constraints": {
+        "max_files": 15,
+        "forbidden_paths": [
+          ".git",
+          "node_modules"
+        ]
+      },
+      "validation": [
+        "node scripts/validate-modules.js ./src/gep/signals ./src/evolve",
+        "node scripts/validate-suite.js"
+      ]
+    },
+    {
+      "type": "Gene",
+      "id": "gene_distilled_s2g-env-vars",
+      "summary": "Vercel environment variable expert guidance. Use when working with .env files, vercel env commands, OIDC tokens, or managing environment-specific configuration.",
+      "category": "optimize",
+      "signals_match": [
+        "use_when_working_with",
+        "env_files",
+        "vercel_env_commands",
+        "oidc_tokens",
+        "vercel_env_pull",
+        "env_local_overwrite",
+        "oidc_token_expiry",
+        "dotenv_cli"
+      ],
+      "preconditions": [
+        "Skill env-vars has just been executed locally"
+      ],
+      "strategy": [
+        "Identify the dominant trigger signals from the Skill description.",
+        "Apply the smallest targeted change that satisfies the Skill workflow.",
+        "Run the Skill validation commands and abort if any fails."
+      ],
+      "constraints": {
+        "max_files": 12,
+        "forbidden_paths": [
+          ".git",
+          "node_modules"
+        ]
+      },
+      "validation": [
+        "node --version"
+      ],
+      "schema_version": "1.6.0",
+      "_source": {
+        "kind": "skill2gep",
+        "skill_name": "env-vars",
+        "skill_platform": "vercel",
+        "skill_hash": "ba0bdb4db2",
+        "rationale_paper": "Wang, Ren, Zhang. From Procedural Skills to Strategy Genes. arXiv:2604.15097",
+        "paper_scope": "code-science (arXiv:2604.15097, 45 tasks, Gemini 3.1 Pro/Flash Lite)",
+        "claims_outside_scope": "assumption",
+        "quality_heuristics": {
+          "strategy_steps": 0,
+          "avoid_count": 0,
+          "validation_declared_count": 0,
+          "validation_runnable_count": 0,
+          "validation_fallback_used": true,
+          "signals_extracted": 4,
+          "preconditions_extracted": 0
+        }
+      },
+      "asset_id": "sha256:4fa74fe34d19564416dfd8e63f3012a1672e86f39c4bff85d1c70524e06b5a2e"
+    }
+  ]
+}

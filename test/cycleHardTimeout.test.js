@@ -115,10 +115,13 @@ describe('index.js daemon loop hard-timeout structure', () => {
   });
 
   it('on CYCLE_TIMEOUT, force-respawns + exits with code 1', () => {
+    // v1.79.1: the inline spawn was extracted into spawnReplacementProcess()
+    // so the CYCLE_TIMEOUT branch can share the Windows-aware policy used
+    // elsewhere. The branch must still call the helper and then exit(1).
     assert.match(
       source,
-      /error\.code === 'CYCLE_TIMEOUT'[\s\S]*?spawn\(process\.execPath, \[__filename, \.\.\.args\][\s\S]*?process\.exit\(1\)/,
-      'CYCLE_TIMEOUT branch must spawn replacement and exit(1)'
+      /error\.code === 'CYCLE_TIMEOUT'[\s\S]*?spawnReplacementProcess\(\{[\s\S]*?reason: 'cycle_hard_timeout'[\s\S]*?process\.exit\(1\)/,
+      'CYCLE_TIMEOUT branch must call spawnReplacementProcess and exit(1)'
     );
   });
 });
