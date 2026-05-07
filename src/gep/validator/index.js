@@ -10,7 +10,7 @@
 'use strict';
 
 const { getNodeId, buildHubHeaders, getHubUrl } = require('../a2aProtocol');
-const { runInSandbox } = require('./sandboxExecutor');
+const { runInSandbox, runPreflight } = require('./sandboxExecutor');
 const { buildReportPayload, submitReport } = require('./reporter');
 const { ensureValidatorStake } = require('./stakeBootstrap');
 const { readFeatureFlag } = require('../featureFlags');
@@ -138,6 +138,48 @@ async function validateOneTask(task) {
   };
 }
 
+// Lazy single-shot preflight cache. Runs once per process, reused by both the
+// daemon and the inline runValidatorCycle() called from the main evolve loop.
+let _preflightPromise = null;
+let _preflightResult = null;
+
+async function _ensurePreflight() {
+  if (_preflightResult) return _preflightResult;
+  if (_preflightPromise) return _preflightPromise;
+  _preflightPromise = (async () => {
+    try {
+      _preflightResult = await runPreflight();
+    } catch (err) {
+      _preflightResult = {
+        ok: false,
+        reason: 'preflight_threw',
+        durationMs: 0,
+        stderrTail: err && err.message ? String(err.message) : String(err),
+      };
+    }
+    _daemonStats.preflight = {
+      ok: !!_preflightResult.ok,
+      reason: _preflightResult.reason || null,
+      duration_ms: _preflightResult.durationMs || 0,
+      at: Date.now(),
+    };
+    if (!_preflightResult.ok) {
+      _preflightDisabled = true;
+      try {
+        console.warn(
+          '[Validator] Preflight FAILED (' + (_preflightResult.reason || 'unknown') + '): ' +
+          'cannot spawn `node <script>` inside the sandbox on this host. ' +
+          'Validator role is being SKIPPED to avoid flooding the Hub with env_fail reports. ' +
+          'Likely causes: node binary not on PATH for headless invocations, missing exec perm, ' +
+          'or unwritable TMPDIR. Diagnostic stderr: ' + (_preflightResult.stderrTail || '<empty>')
+        );
+      } catch (_) { /* console unavailable -- non-fatal */ }
+    }
+    return _preflightResult;
+  })();
+  return _preflightPromise;
+}
+
 /**
  * Run one validator cycle. Intended to be called from the main evolve loop.
  * Returns a summary object (useful for logging/tests).
@@ -148,6 +190,15 @@ async function runValidatorCycle(opts) {
   const options = opts || {};
   if (!isValidatorEnabled()) {
     return { skipped: 'disabled' };
+  }
+  // Lazy preflight gate: refuse to talk to the Hub if the local toolchain
+  // cannot even run a trivial `node <script>` in the sandbox. Without this,
+  // every validation task posted to this node returns duration_ms=1 /
+  // commands_passed=0 and the Hub auto-quarantines the node for chronic
+  // env_fail.
+  const pf = await _ensurePreflight();
+  if (!pf.ok) {
+    return { skipped: 'preflight_failed', reason: pf.reason || 'unknown' };
   }
   if (!options.skipStake) {
     try {
@@ -198,13 +249,20 @@ const DAEMON_FIRST_DELAY_MS = Math.max(0, _envIntDefault('EVOLVER_VALIDATOR_DAEM
 let _daemonTimer = null;
 let _daemonRunning = false;
 let _daemonInflight = false;
-let _daemonStats = { ticks: 0, processed: 0, lastError: null, lastRunAt: 0 };
+let _daemonStats = { ticks: 0, processed: 0, lastError: null, lastRunAt: 0, preflight: null };
+let _preflightDisabled = false;
 
 async function _daemonTick() {
   if (_daemonInflight) return;
   _daemonInflight = true;
   try {
     if (!isValidatorEnabled()) {
+      _daemonStats.ticks += 1;
+      return;
+    }
+    if (_preflightDisabled) {
+      // Preflight failed during startup -- stay silent. We still tick so the
+      // operator can re-enable later by restarting the agent after fixing PATH.
       _daemonStats.ticks += 1;
       return;
     }
@@ -246,6 +304,10 @@ function startValidatorDaemon() {
         'be used. To opt out, set EVOLVER_VALIDATOR_ENABLED=false (or unset it).'
       );
     } catch (_) { /* console unavailable -- non-fatal */ }
+    // Fire preflight immediately so the user-visible warning lands before the
+    // first DAEMON_FIRST_DELAY_MS tick. _ensurePreflight is idempotent and the
+    // first call from runValidatorCycle will reuse this promise.
+    _ensurePreflight();
   }
   _daemonTimer = setTimeout(_daemonTick, DAEMON_FIRST_DELAY_MS);
   return true;
@@ -263,6 +325,25 @@ function getValidatorDaemonStats() {
   return Object.assign({ running: _daemonRunning, intervalMs: DAEMON_INTERVAL_MS }, _daemonStats);
 }
 
+function _resetPreflightForTests() {
+  _preflightPromise = null;
+  _preflightResult = null;
+  _preflightDisabled = false;
+  _daemonStats.preflight = null;
+}
+
+function _setPreflightForTests(result) {
+  _preflightResult = result || { ok: true, durationMs: 0 };
+  _preflightPromise = Promise.resolve(_preflightResult);
+  _preflightDisabled = !_preflightResult.ok;
+  _daemonStats.preflight = {
+    ok: !!_preflightResult.ok,
+    reason: _preflightResult.reason || null,
+    duration_ms: _preflightResult.durationMs || 0,
+    at: Date.now(),
+  };
+}
+
 module.exports = {
   runValidatorCycle,
   fetchValidationTasks,
@@ -271,4 +352,6 @@ module.exports = {
   startValidatorDaemon,
   stopValidatorDaemon,
   getValidatorDaemonStats,
+  _resetPreflightForTests,
+  _setPreflightForTests,
 };

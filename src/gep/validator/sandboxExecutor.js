@@ -382,9 +382,53 @@ async function runInSandbox(commands, opts) {
   };
 }
 
+/**
+ * Self-test to confirm the validator host can spawn a `node <script>` process
+ * inside the sandbox successfully. Used by the validator daemon at startup to
+ * decide whether to participate at all -- if the local toolchain cannot even
+ * run `node a-trivial-script.js`, the daemon will refuse to start and print a
+ * user-visible warning instead of flooding the Hub with env_fail reports.
+ *
+ * @returns {Promise<{ok: boolean, reason?: string, exitCode?: number, durationMs: number, stderrTail?: string}>}
+ */
+async function runPreflight() {
+  const sandboxDir = createSandboxDir();
+  const startedAt = Date.now();
+  const scriptPath = path.join(sandboxDir, '__evolver_preflight.js');
+  try {
+    fs.writeFileSync(scriptPath, "process.stdout.write('preflight_ok\\n');\nprocess.exit(0);\n", { encoding: 'utf8' });
+    const r = await runSingleCommand('node __evolver_preflight.js', {
+      cwd: sandboxDir,
+      timeoutMs: 10_000,
+    });
+    if (!r.ok) {
+      return {
+        ok: false,
+        reason: r.timedOut
+          ? 'preflight_timeout'
+          : (typeof r.exitCode === 'number' && r.exitCode !== 0 ? 'preflight_exit_nonzero' : 'preflight_failed'),
+        exitCode: r.exitCode,
+        durationMs: r.durationMs,
+        stderrTail: typeof r.stderr === 'string' ? r.stderr.slice(-240) : '',
+      };
+    }
+    return { ok: true, exitCode: r.exitCode || 0, durationMs: Date.now() - startedAt };
+  } catch (err) {
+    return {
+      ok: false,
+      reason: 'preflight_exception',
+      durationMs: Date.now() - startedAt,
+      stderrTail: err && err.message ? String(err.message).slice(-240) : '',
+    };
+  } finally {
+    cleanupDir(sandboxDir);
+  }
+}
+
 module.exports = {
   runInSandbox,
   runSingleCommand,
+  runPreflight,
   createSandboxDir,
   cleanupDir,
   buildSandboxEnv,
